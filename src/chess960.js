@@ -55,6 +55,9 @@ const CASTLE_SIDE_NAMES = Object.freeze({
     kingSide: "O-O",
     queenSide: "O-O-O"
 });
+const DEFAULT_FEN_OPTIONS = Object.freeze({
+    castlingFormat: "shredder"
+});
 
 function cloneBackRank(backRank) {
     return [...backRank];
@@ -85,6 +88,25 @@ function getLineSquares(row, fromCol, toCol) {
     }
 
     return squares;
+}
+
+function pieceToFenSymbol(piece) {
+    if (!piece) {
+        return "";
+    }
+
+    return piece.color === "white" ? piece.type : piece.type.toLowerCase();
+}
+
+function fenSymbolToPieceType(symbol) {
+    const normalized = symbol.toUpperCase();
+    const supported = ["K", "Q", "R", "B", "N", "P"];
+
+    if (!supported.includes(normalized)) {
+        throw new Error(`Unsupported FEN piece symbol: ${symbol}`);
+    }
+
+    return normalized;
 }
 
 function parseSquare(square) {
@@ -216,6 +238,33 @@ function createCastlingConfig(backRank) {
             }
         }
     };
+}
+
+function boardToFenPlacement(board) {
+    return board.map((row) => {
+        let emptyCount = 0;
+        let output = "";
+
+        row.forEach((piece) => {
+            if (!piece) {
+                emptyCount += 1;
+                return;
+            }
+
+            if (emptyCount > 0) {
+                output += String(emptyCount);
+                emptyCount = 0;
+            }
+
+            output += pieceToFenSymbol(piece);
+        });
+
+        if (emptyCount > 0) {
+            output += String(emptyCount);
+        }
+
+        return output;
+    }).join("/");
 }
 
 export default class Chess960 {
@@ -377,6 +426,79 @@ export default class Chess960 {
         return JSON.parse(JSON.stringify(gameState));
     }
 
+    exportFEN(gameState, options = {}) {
+        const normalizedState = this.hydrateGameState(gameState);
+        const fenOptions = { ...DEFAULT_FEN_OPTIONS, ...options };
+        const placement = boardToFenPlacement(normalizedState.board);
+        const activeColor = normalizedState.activeColor === "black" ? "b" : "w";
+        const castlingRights = this.#formatFenCastlingRights(normalizedState, fenOptions.castlingFormat);
+        const enPassantTarget = normalizedState.enPassantTarget ?? "-";
+
+        return [
+            placement,
+            activeColor,
+            castlingRights,
+            enPassantTarget,
+            normalizedState.halfmoveClock,
+            normalizedState.fullmoveNumber
+        ].join(" ");
+    }
+
+    importFEN(fen, options = {}) {
+        if (typeof fen !== "string") {
+            throw new Error("FEN must be a string.");
+        }
+
+        const parts = fen.trim().split(/\s+/);
+        if (parts.length !== 6) {
+            throw new Error("FEN must have exactly 6 fields.");
+        }
+
+        const [placement, activeColorToken, castlingToken, enPassantToken, halfmoveToken, fullmoveToken] = parts;
+        const board = this.#parseFenPlacement(placement);
+        const positionInput = this.#resolveImportedPositionInput(board, options);
+        const backRank = this.#resolveBackRank(positionInput);
+        const castlingConfig = this.#createImportedCastlingConfig(board, backRank, castlingToken);
+        const castlingRights = this.#parseFenCastlingRights(castlingToken, castlingConfig);
+        const activeColor = activeColorToken === "b" ? "black" : activeColorToken === "w" ? "white" : null;
+
+        if (!activeColor) {
+            throw new Error(`Invalid active color token in FEN: ${activeColorToken}`);
+        }
+
+        const enPassantTarget = enPassantToken === "-" ? null : parseSquare(enPassantToken).square;
+        const halfmoveClock = Number(halfmoveToken);
+        const fullmoveNumber = Number(fullmoveToken);
+
+        if (!Number.isInteger(halfmoveClock) || halfmoveClock < 0) {
+            throw new Error(`Invalid halfmove clock in FEN: ${halfmoveToken}`);
+        }
+
+        if (!Number.isInteger(fullmoveNumber) || fullmoveNumber < 1) {
+            throw new Error(`Invalid fullmove number in FEN: ${fullmoveToken}`);
+        }
+
+        const gameState = {
+            positionId: Array.isArray(positionInput) ? this.getIdFromPosition(positionInput) : positionInput,
+            backRank,
+            board: this.#applyImportedPieceFlags(board, castlingConfig, castlingRights),
+            activeColor,
+            selectedSquare: null,
+            legalTargets: [],
+            moveHistory: [],
+            status: "ready",
+            winner: null,
+            isCheck: false,
+            enPassantTarget,
+            halfmoveClock,
+            fullmoveNumber,
+            castlingConfig,
+            castlingRights
+        };
+
+        return this.#syncDerivedState(gameState);
+    }
+
     #cloneGameState(rawState) {
         const defaultCastlingConfig = createCastlingConfig(rawState.backRank);
 
@@ -400,6 +522,226 @@ export default class Chess960 {
                 black: { kingSide: true, queenSide: true }
             }
         };
+    }
+
+    #parseFenPlacement(placement) {
+        const ranks = placement.split("/");
+
+        if (ranks.length !== BOARD_SIZE) {
+            throw new Error("FEN board placement must contain 8 ranks.");
+        }
+
+        const board = createEmptyBoard();
+
+        ranks.forEach((rankToken, row) => {
+            let col = 0;
+
+            for (const symbol of rankToken) {
+                if (/^\d$/.test(symbol)) {
+                    col += Number(symbol);
+                    continue;
+                }
+
+                if (!isInsideBoard(row, col)) {
+                    throw new Error(`FEN rank overflows board width: ${rankToken}`);
+                }
+
+                const type = fenSymbolToPieceType(symbol);
+                const color = symbol === symbol.toUpperCase() ? "white" : "black";
+                board[row][col] = createPiece(type, color, row, col);
+                col += 1;
+            }
+
+            if (col !== BOARD_SIZE) {
+                throw new Error(`FEN rank does not fill 8 files: ${rankToken}`);
+            }
+        });
+
+        return board;
+    }
+
+    #resolveImportedPositionInput(board, options) {
+        if (typeof options.positionId === "number") {
+            return options.positionId;
+        }
+
+        if (Array.isArray(options.backRank)) {
+            return options.backRank;
+        }
+
+        if (Array.isArray(options.positionInput)) {
+            return options.positionInput;
+        }
+
+        const whiteHomeRank = board[7].map((piece) => piece?.color === "white" ? piece.type : null);
+        if (whiteHomeRank.every(Boolean) && this.isValidBackRank(whiteHomeRank)) {
+            return whiteHomeRank;
+        }
+
+        const blackHomeRank = board[0].map((piece) => piece?.color === "black" ? piece.type : null);
+        if (blackHomeRank.every(Boolean) && this.isValidBackRank(blackHomeRank)) {
+            return blackHomeRank;
+        }
+
+        throw new Error("Importing this FEN needs the original Chess960 setup. Pass options.backRank or options.positionId.");
+    }
+
+    #createImportedCastlingConfig(board, backRank, castlingToken) {
+        const config = createCastlingConfig(backRank);
+        const parsedToken = castlingToken === "-" ? "" : castlingToken;
+        const tokenChars = [...parsedToken];
+
+        ["white", "black"].forEach((color) => {
+            const kingSquare = this.#findKingSquare(board, color)?.square;
+            if (kingSquare) {
+                config[color].kingStart = kingSquare;
+            }
+        });
+
+        tokenChars.forEach((token) => {
+            if (token === "K" || token === "Q" || token === "k" || token === "q") {
+                return;
+            }
+
+            const isWhite = token === token.toUpperCase();
+            const color = isWhite ? "white" : "black";
+            const file = token.toLowerCase();
+            const col = FILES.indexOf(file);
+
+            if (col === -1) {
+                throw new Error(`Unsupported castling token in FEN: ${token}`);
+            }
+
+            const kingCol = parseSquare(config[color].kingStart).col;
+            const side = col > kingCol ? "kingSide" : "queenSide";
+            const row = color === "white" ? 7 : 0;
+            config[color].rookStarts[side] = squareFromIndex(row, col);
+        });
+
+        return config;
+    }
+
+    #parseFenCastlingRights(castlingToken, castlingConfig) {
+        const rights = {
+            white: { kingSide: false, queenSide: false },
+            black: { kingSide: false, queenSide: false }
+        };
+
+        if (castlingToken === "-") {
+            return rights;
+        }
+
+        for (const token of castlingToken) {
+            if (token === "K") {
+                rights.white.kingSide = true;
+                continue;
+            }
+
+            if (token === "Q") {
+                rights.white.queenSide = true;
+                continue;
+            }
+
+            if (token === "k") {
+                rights.black.kingSide = true;
+                continue;
+            }
+
+            if (token === "q") {
+                rights.black.queenSide = true;
+                continue;
+            }
+
+            const isWhite = token === token.toUpperCase();
+            const color = isWhite ? "white" : "black";
+            const col = FILES.indexOf(token.toLowerCase());
+
+            if (col === -1) {
+                throw new Error(`Unsupported castling token in FEN: ${token}`);
+            }
+
+            const kingCol = parseSquare(castlingConfig[color].kingStart).col;
+            const side = col > kingCol ? "kingSide" : "queenSide";
+            rights[color][side] = true;
+        }
+
+        return rights;
+    }
+
+    #formatFenCastlingRights(gameState, castlingFormat) {
+        const white = this.#formatFenCastlingRightsForColor(gameState, "white", castlingFormat);
+        const black = this.#formatFenCastlingRightsForColor(gameState, "black", castlingFormat);
+        const token = `${white}${black}`;
+
+        return token || "-";
+    }
+
+    #formatFenCastlingRightsForColor(gameState, color, castlingFormat) {
+        const config = gameState.castlingConfig[color];
+        const rights = gameState.castlingRights[color];
+        const isWhite = color === "white";
+        const tokens = [];
+
+        if (rights.kingSide) {
+            tokens.push(this.#formatFenCastleToken(config.rookStarts.kingSide, "kingSide", castlingFormat, isWhite));
+        }
+
+        if (rights.queenSide) {
+            tokens.push(this.#formatFenCastleToken(config.rookStarts.queenSide, "queenSide", castlingFormat, isWhite));
+        }
+
+        return tokens.join("");
+    }
+
+    #formatFenCastleToken(rookStartSquare, side, castlingFormat, isWhite) {
+        if (!rookStartSquare) {
+            return "";
+        }
+
+        if (castlingFormat === "standard") {
+            const baseToken = side === "kingSide" ? "K" : "Q";
+            return isWhite ? baseToken : baseToken.toLowerCase();
+        }
+
+        const file = rookStartSquare[0];
+        return isWhite ? file.toUpperCase() : file;
+    }
+
+    #applyImportedPieceFlags(board, castlingConfig, castlingRights) {
+        return board.map((row) => row.map((piece) => {
+            if (!piece) {
+                return null;
+            }
+
+            return {
+                ...piece,
+                hasMoved: this.#inferImportedPieceHasMoved(piece, castlingConfig, castlingRights)
+            };
+        }));
+    }
+
+    #inferImportedPieceHasMoved(piece, castlingConfig, castlingRights) {
+        if (piece.type === "P") {
+            return !(piece.color === "white" ? piece.row === 6 : piece.row === 1);
+        }
+
+        if (piece.type === "K") {
+            const anyRights = castlingRights[piece.color].kingSide || castlingRights[piece.color].queenSide;
+            return !(anyRights && piece.square === castlingConfig[piece.color].kingStart);
+        }
+
+        if (piece.type === "R") {
+            const config = castlingConfig[piece.color];
+            if (castlingRights[piece.color].kingSide && piece.square === config.rookStarts.kingSide) {
+                return false;
+            }
+
+            if (castlingRights[piece.color].queenSide && piece.square === config.rookStarts.queenSide) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     getPieceAt(gameState, square) {
