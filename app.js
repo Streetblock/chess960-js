@@ -1,6 +1,7 @@
 import Chess960 from "./src/chess960.js";
 
-const STORAGE_KEY = "chess960.ui-state";
+const UI_STORAGE_KEY = "chess960.ui-state";
+const GAME_STORAGE_KEY = "chess960.game-state";
 const PIECES = ["R", "N", "B", "Q", "K"];
 const WHITE_SYMBOLS = {
     R: "\u2656",
@@ -18,6 +19,17 @@ const BLACK_SYMBOLS = {
     K: "\u265A",
     P: "\u265F"
 };
+const COLOR_LABELS = {
+    white: "Wei\u00df",
+    black: "Schwarz"
+};
+const STATUS_LABELS = {
+    ready: "Bereit",
+    active: "Partie l\u00e4uft",
+    check: "Schach",
+    checkmate: "Schachmatt",
+    stalemate: "Patt"
+};
 
 const chess960 = new Chess960();
 
@@ -29,6 +41,12 @@ const fullBoardContainer = document.getElementById("fullBoard");
 const copyBtn = document.getElementById("copyBtn");
 const diceBtn = document.getElementById("diceBtn");
 const resetBtn = document.getElementById("resetBtn");
+const restartGameBtn = document.getElementById("restartGameBtn");
+const activeColorDisplay = document.getElementById("activeColor");
+const gameStatusDisplay = document.getElementById("gameStatus");
+const moveLog = document.getElementById("moveLog");
+
+let gameState = null;
 
 function initializeDropdowns() {
     squares.forEach((square) => {
@@ -48,7 +66,7 @@ function initializeDropdowns() {
 function loadPositionById(id) {
     const backRank = chess960.generate(id);
     applyBackRankToInputs(backRank);
-    updateUiFromInputs({ currentId: id });
+    initializeGameFromBackRank(backRank, id);
 }
 
 function applyBackRankToInputs(backRank) {
@@ -62,94 +80,221 @@ function getCurrentBackRank() {
 }
 
 function handleBackRankChange() {
-    updateUiFromInputs();
-}
-
-function updateUiFromInputs({ currentId = null } = {}) {
     const backRank = getCurrentBackRank();
-    const isValid = chess960.isValidBackRank(backRank);
 
-    if (!isValid) {
-        currentIdDisplay.textContent = currentId ?? "-";
-        errorMsg.classList.remove("hidden");
-        reverseIdDisplay.className = "error";
-        reverseIdDisplay.textContent = "Ungueltige Aufstellung";
-        fullBoardContainer.innerHTML = "";
-        copyBtn.disabled = true;
-        copyBtn.style.opacity = "0.5";
-        persistUiState({
-            currentId,
-            backRank,
-            isValid
-        });
+    if (!chess960.isValidBackRank(backRank)) {
+        renderInvalidBackRank(backRank);
         return;
     }
 
-    const calculatedId = chess960.getIdFromPosition(backRank);
-    const boardState = chess960.createStartingBoard(backRank);
-
-    currentIdDisplay.textContent = currentId ?? calculatedId;
-    errorMsg.classList.add("hidden");
-    reverseIdDisplay.className = "success";
-    reverseIdDisplay.textContent = `Gueltige ID: ${calculatedId}`;
-    copyBtn.disabled = false;
-    copyBtn.style.opacity = "1";
-
-    renderBoard(boardState.board);
-    persistUiState({
-        currentId: calculatedId,
-        backRank: boardState.backRank,
-        isValid
-    });
+    initializeGameFromBackRank(backRank);
 }
 
-function renderBoard(board) {
+function initializeGameFromBackRank(backRank, currentId = null) {
+    const positionId = currentId ?? chess960.getIdFromPosition(backRank);
+    gameState = chess960.createGame(backRank);
+    renderValidBackRank(backRank, positionId);
+    renderGame();
+    persistUiState({
+        currentId: positionId,
+        backRank: gameState.backRank,
+        isValid: true
+    });
+    persistGameState();
+}
+
+function renderInvalidBackRank(backRank) {
+    currentIdDisplay.textContent = "-";
+    errorMsg.classList.remove("hidden");
+    reverseIdDisplay.className = "error";
+    reverseIdDisplay.textContent = "Ungueltige Aufstellung";
+    fullBoardContainer.innerHTML = "";
+    copyBtn.disabled = true;
+    copyBtn.style.opacity = "0.5";
+    activeColorDisplay.textContent = "-";
+    gameStatusDisplay.textContent = "Warte auf gueltige Startaufstellung";
+    moveLog.innerHTML = '<li class="move-log-empty">Noch keine Partie gestartet.</li>';
+    persistUiState({
+        currentId: null,
+        backRank,
+        isValid: false
+    });
+    localStorage.removeItem(GAME_STORAGE_KEY);
+    gameState = null;
+}
+
+function renderValidBackRank(backRank, currentId) {
+    currentIdDisplay.textContent = currentId;
+    errorMsg.classList.add("hidden");
+    reverseIdDisplay.className = "success";
+    reverseIdDisplay.textContent = `Gueltige ID: ${currentId}`;
+    copyBtn.disabled = false;
+    copyBtn.style.opacity = "1";
+    applyBackRankToInputs(backRank);
+}
+
+function renderGame() {
+    if (!gameState) {
+        return;
+    }
+
+    renderBoard(gameState);
+    renderGameStatus(gameState);
+    renderMoveLog(gameState.moveHistory);
+}
+
+function renderBoard(state) {
     fullBoardContainer.innerHTML = "";
 
-    board.forEach((row, rowIndex) => {
+    state.board.forEach((row, rowIndex) => {
         row.forEach((piece, colIndex) => {
-            const square = document.createElement("div");
+            const squareName = toSquareName(rowIndex, colIndex);
+            const square = document.createElement("button");
             const isLightSquare = (rowIndex + colIndex) % 2 === 0;
+
+            square.type = "button";
             square.className = `board-square ${isLightSquare ? "light-square" : "dark-square"}`;
-            square.textContent = piece ? getSymbolForPiece(piece) : "";
+            square.dataset.square = squareName;
+            square.setAttribute("aria-label", `${squareName}${piece ? ` ${piece.color} ${piece.type}` : ""}`);
+
+            if (state.selectedSquare === squareName) {
+                square.classList.add("selected-square");
+            }
+
+            if (state.legalTargets.includes(squareName)) {
+                square.classList.add("legal-target");
+            }
+
+            if (piece) {
+                square.textContent = getSymbolForPiece(piece);
+                square.classList.add(piece.color === "white" ? "piece-white" : "piece-black");
+            } else {
+                square.textContent = "";
+            }
+
+            square.addEventListener("click", () => handleBoardClick(squareName));
             fullBoardContainer.appendChild(square);
         });
     });
 }
 
-function getSymbolForPiece(piece) {
-    if (piece.color === "white") {
-        return WHITE_SYMBOLS[piece.type];
+function renderGameStatus(state) {
+    activeColorDisplay.textContent = COLOR_LABELS[state.activeColor];
+
+    if (state.status === "checkmate") {
+        gameStatusDisplay.textContent = `Schachmatt - ${COLOR_LABELS[state.winner]} gewinnt`;
+        return;
     }
 
-    return BLACK_SYMBOLS[piece.type];
+    if (state.status === "stalemate") {
+        gameStatusDisplay.textContent = "Patt";
+        return;
+    }
+
+    if (state.status === "check") {
+        gameStatusDisplay.textContent = `${COLOR_LABELS[state.activeColor]} steht im Schach`;
+        return;
+    }
+
+    gameStatusDisplay.textContent = STATUS_LABELS[state.status] ?? STATUS_LABELS.active;
+}
+
+function renderMoveLog(moves) {
+    moveLog.innerHTML = "";
+
+    if (moves.length === 0) {
+        moveLog.innerHTML = '<li class="move-log-empty">Noch keine Zuege ausgefuehrt.</li>';
+        return;
+    }
+
+    moves.forEach((move) => {
+        const item = document.createElement("li");
+        item.className = "move-log-item";
+        item.textContent = `${move.moveNumber}. ${COLOR_LABELS[move.color]} ${move.notation}`;
+        moveLog.appendChild(item);
+    });
+}
+
+function handleBoardClick(square) {
+    if (!gameState) {
+        return;
+    }
+
+    try {
+        gameState = chess960.performInteraction(gameState, square);
+        renderGame();
+        persistGameState();
+    } catch (error) {
+        console.error("Board interaction failed", error);
+    }
+}
+
+function restartCurrentGame() {
+    const backRank = getCurrentBackRank();
+
+    if (!chess960.isValidBackRank(backRank)) {
+        renderInvalidBackRank(backRank);
+        return;
+    }
+
+    initializeGameFromBackRank(backRank);
+}
+
+function getSymbolForPiece(piece) {
+    return piece.color === "white" ? WHITE_SYMBOLS[piece.type] : BLACK_SYMBOLS[piece.type];
+}
+
+function toSquareName(rowIndex, colIndex) {
+    return `${String.fromCharCode(97 + colIndex)}${8 - rowIndex}`;
 }
 
 function persistUiState(state) {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    localStorage.setItem(UI_STORAGE_KEY, JSON.stringify(state));
 }
 
-function readPersistedUiState() {
+function persistGameState() {
+    if (!gameState) {
+        localStorage.removeItem(GAME_STORAGE_KEY);
+        return;
+    }
+
+    localStorage.setItem(GAME_STORAGE_KEY, JSON.stringify(chess960.serializeGameState(gameState)));
+}
+
+function readJsonStorage(key) {
     try {
-        const rawValue = localStorage.getItem(STORAGE_KEY);
-
-        if (!rawValue) {
-            return null;
-        }
-
-        return JSON.parse(rawValue);
+        const rawValue = localStorage.getItem(key);
+        return rawValue ? JSON.parse(rawValue) : null;
     } catch (error) {
-        console.warn("Could not restore persisted Chess960 UI state.", error);
+        console.warn(`Could not restore persisted state for ${key}.`, error);
         return null;
     }
 }
 
 function restoreInitialState() {
-    const persistedState = readPersistedUiState();
+    const persistedUiState = readJsonStorage(UI_STORAGE_KEY);
+    const persistedGameState = readJsonStorage(GAME_STORAGE_KEY);
 
-    if (persistedState?.isValid && Array.isArray(persistedState.backRank)) {
-        applyBackRankToInputs(persistedState.backRank);
-        updateUiFromInputs({ currentId: persistedState.currentId });
+    if (persistedGameState?.backRank && chess960.isValidBackRank(persistedGameState.backRank)) {
+        try {
+            gameState = chess960.hydrateGameState(persistedGameState);
+            applyBackRankToInputs(gameState.backRank);
+            renderValidBackRank(gameState.backRank, gameState.positionId);
+            renderGame();
+            persistUiState({
+                currentId: gameState.positionId,
+                backRank: gameState.backRank,
+                isValid: true
+            });
+            return;
+        } catch (error) {
+            console.warn("Could not restore persisted game state.", error);
+        }
+    }
+
+    if (persistedUiState?.isValid && Array.isArray(persistedUiState.backRank) && chess960.isValidBackRank(persistedUiState.backRank)) {
+        applyBackRankToInputs(persistedUiState.backRank);
+        initializeGameFromBackRank(persistedUiState.backRank, persistedUiState.currentId);
         return;
     }
 
@@ -198,10 +343,12 @@ diceBtn.addEventListener("click", () => {
 });
 
 resetBtn.addEventListener("click", () => {
-    localStorage.removeItem(STORAGE_KEY);
+    localStorage.removeItem(UI_STORAGE_KEY);
+    localStorage.removeItem(GAME_STORAGE_KEY);
     loadPositionById(chess960.classicPositionId);
 });
 
+restartGameBtn.addEventListener("click", restartCurrentGame);
 copyBtn.addEventListener("click", copyToClipboard);
 
 initializeDropdowns();
