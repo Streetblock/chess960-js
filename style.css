@@ -1,0 +1,168 @@
+/* ==========================================
+   General Reset and Layout (Mobile Optimized)
+   ========================================== */
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background-color: #f4f4f9;
+    color: #333;
+    display: flex;
+    justify-content: center;
+    padding: 20px 10px; /* Less padding on small screens */
+}
+
+.container {
+    background: #ffffff;
+    padding: 25px 15px;
+    border-radius: 12px;
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1);
+    text-align: center;
+    width: 100%;
+    max-width: 600px;
+}
+
+h1 {
+    margin-bottom: 20px;
+    color: #2c3e50;
+    font-size: clamp(1.5rem, 5vw, 2rem); /* Scales with screen width */
+}
+
+h2 {
+    margin-bottom: 15px;
+    color: #34495e;
+    font-size: clamp(1.2rem, 4vw, 1.5rem);
+}
+
+/* ==========================================
+   Controls & Buttons
+   ========================================== */
+.controls {
+    margin-bottom: 25px;
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+    flex-wrap: wrap; /* Allows wrapping on very narrow screens */
+}
+
+button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 12px 15px; /* Larger touch targets for mobile */
+    font-size: clamp(14px, 3.5vw, 15px);
+    font-weight: 600;
+    cursor: pointer;
+    background-color: #3498db;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    transition: background-color 0.2s ease, transform 0.1s ease;
+    flex: 1 1 auto; /* Grow to fill space smoothly */
+    min-width: 130px;
+}
+
+button:hover { background-color: #2980b9; }
+button:active { transform: scale(0.98); }
+
+/* Specific Button Colors */
+#diceBtn { background-color: #9b59b6; }
+#diceBtn:hover { background-color: #8e44ad; }
+#copyBtn { background-color: #2ecc71; }
+#copyBtn:hover { background-color: #27ae60; }
+#copyBtn.copied { background-color: #f39c12; }
+
+/* ==========================================
+   Responsive Input Board (Dropdowns)
+   ========================================== */
+.board {
+    display: grid;
+    grid-template-columns: repeat(8, 1fr);
+    border: 2px solid #2c3e50;
+    margin: 0 auto 20px;
+    width: 100%;
+    max-width: 480px; /* Capped max width */
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.square {
+    width: 100%;
+    aspect-ratio: 1 / 1; /* Keeps dropdowns perfectly square automatically */
+    font-size: clamp(18px, 6vw, 32px); /* Scales icon size down on small phones */
+    text-align: center;
+    text-align-last: center; /* Centers selected option text */
+    border: none;
+    outline: none;
+    cursor: pointer;
+    border-radius: 0; /* Prevents rounded iOS corners */
+    
+    /* Hides the native dropdown arrow */
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    appearance: none;
+}
+
+.square > option { text-align: center; }
+
+/* Board Colors */
+.dark { background-color: #b58863; color: black; }
+.light { background-color: #f0d9b5; color: black; }
+
+/* ==========================================
+   Status Panel
+   ========================================== */
+.status-panel {
+    background: #f8f9fa;
+    padding: 15px;
+    border-radius: 8px;
+    border: 1px solid #ddd;
+    margin-bottom: 20px;
+    word-wrap: break-word; /* Prevent text overflow on small devices */
+}
+
+.status-panel p { margin: 8px 0; font-size: clamp(14px, 4vw, 16px); }
+.success { color: #27ae60; }
+.error { color: #c0392b; font-weight: bold; }
+.hidden { display: none; }
+
+hr {
+    border: 0;
+    height: 1px;
+    background: #e0e0e0;
+    margin: 25px 0;
+}
+
+/* ==========================================
+   Responsive 8x8 Chessboard
+   ========================================== */
+.chessboard {
+    display: grid;
+    grid-template-columns: repeat(8, 1fr);
+    border: 2px solid #2c3e50;
+    margin: 0 auto;
+    width: 100%;
+    max-width: 480px;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.board-square {
+    width: 100%;
+    aspect-ratio: 1 / 1;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-size: clamp(20px, 7vw, 38px); /* Dynamic piece size */
+    cursor: default;
+    user-select: none;
+}
+
+.dark-square { background-color: #b58863; color: #000; }
+.light-square { background-color: #f0d9b5; color: #000; }

@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <!-- Mobil-Optimierung für Viewport und Touch -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Chess960 Generator & Validator</title>
+    
+    <!-- Link to the external stylesheet -->
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <h1>Chess960 Generator</h1>
+        
+        <!-- Action Buttons -->
+        <div class="controls">
+            <button id="diceBtn" title="Zufällige Position generieren">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                    <circle cx="8.5" cy="8.5" r="1.5"></circle>
+                    <circle cx="15.5" cy="15.5" r="1.5"></circle>
+                    <circle cx="15.5" cy="8.5" r="1.5"></circle>
+                    <circle cx="8.5" cy="15.5" r="1.5"></circle>
+                    <circle cx="12" cy="12" r="1.5"></circle>
+                </svg>
+                Zufall (0-959)
+            </button>
+            <button id="resetBtn" title="Klassische Aufstellung">Standard (518)</button>
+            
+            <button id="copyBtn" title="Aufstellung kopieren">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                </svg>
+                Kopieren
+            </button>
+        </div>
+
+        <!-- 1x8 Back Rank Input Board (Dropdowns) -->
+        <div class="board" id="inputBoard">
+            <select class="square dark"></select>
+            <select class="square light"></select>
+            <select class="square dark"></select>
+            <select class="square light"></select>
+            <select class="square dark"></select>
+            <select class="square light"></select>
+            <select class="square dark"></select>
+            <select class="square light"></select>
+        </div>
+
+        <!-- Status & Validation Feedback -->
+        <div class="status-panel">
+            <p>Aktuelle Eingabe-ID: <strong id="currentId">518</strong></p>
+            <p>Status: <strong id="reverseId" class="success">Wird berechnet...</strong></p>
+            <p id="errorMsg" class="error hidden">Ungültige Aufstellung! Bitte Regeln beachten.</p>
+        </div>
+
+        <hr>
+
+        <!-- Full 8x8 Chessboard Render Target -->
+        <h2>Komplettes Spielfeld</h2>
+        <div id="fullBoard" class="chessboard">
+            <!-- Dynamically injected via app.js -->
+        </div>
+        
+    </div>
+
+    <!-- IMPORTANT: type="module" is strictly required to import ES6 modules! -->
+    <script type="module" src="app.js"></script>
+</body>
+</html>
