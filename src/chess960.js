@@ -51,6 +51,10 @@ const COLOR_NAMES = Object.freeze({
     white: "White",
     black: "Black"
 });
+const CASTLE_SIDE_NAMES = Object.freeze({
+    kingSide: "O-O",
+    queenSide: "O-O-O"
+});
 
 function cloneBackRank(backRank) {
     return [...backRank];
@@ -66,6 +70,21 @@ function isInsideBoard(row, col) {
 
 function squareFromIndex(row, col) {
     return `${FILES[col]}${BOARD_SIZE - row}`;
+}
+
+function getLineSquares(row, fromCol, toCol) {
+    if (fromCol === toCol) {
+        return [squareFromIndex(row, fromCol)];
+    }
+
+    const step = fromCol < toCol ? 1 : -1;
+    const squares = [];
+
+    for (let col = fromCol; col !== toCol + step; col += step) {
+        squares.push(squareFromIndex(row, col));
+    }
+
+    return squares;
 }
 
 function parseSquare(square) {
@@ -110,6 +129,30 @@ function cloneBoard(board) {
     return board.map((row) => row.map((piece) => clonePiece(piece)));
 }
 
+function cloneCastlingRights(castlingRights) {
+    return {
+        white: { ...castlingRights.white },
+        black: { ...castlingRights.black }
+    };
+}
+
+function cloneCastlingConfig(castlingConfig) {
+    return {
+        white: {
+            kingStart: castlingConfig.white.kingStart,
+            rookStarts: { ...castlingConfig.white.rookStarts },
+            kingTargets: { ...castlingConfig.white.kingTargets },
+            rookTargets: { ...castlingConfig.white.rookTargets }
+        },
+        black: {
+            kingStart: castlingConfig.black.kingStart,
+            rookStarts: { ...castlingConfig.black.rookStarts },
+            kingTargets: { ...castlingConfig.black.kingTargets },
+            rookTargets: { ...castlingConfig.black.rookTargets }
+        }
+    };
+}
+
 function otherColor(color) {
     return color === "white" ? "black" : "white";
 }
@@ -131,6 +174,48 @@ function getPieceLabel(pieceType) {
         default:
             return pieceType;
     }
+}
+
+function createCastlingConfig(backRank) {
+    const kingCol = backRank.indexOf("K");
+    const rookCols = backRank
+        .map((piece, index) => piece === "R" ? index : -1)
+        .filter((index) => index !== -1);
+    const queenSideRookCol = rookCols.find((col) => col < kingCol);
+    const kingSideRookCol = rookCols.find((col) => col > kingCol);
+
+    return {
+        white: {
+            kingStart: squareFromIndex(7, kingCol),
+            rookStarts: {
+                kingSide: typeof kingSideRookCol === "number" ? squareFromIndex(7, kingSideRookCol) : null,
+                queenSide: typeof queenSideRookCol === "number" ? squareFromIndex(7, queenSideRookCol) : null
+            },
+            kingTargets: {
+                kingSide: "g1",
+                queenSide: "c1"
+            },
+            rookTargets: {
+                kingSide: "f1",
+                queenSide: "d1"
+            }
+        },
+        black: {
+            kingStart: squareFromIndex(0, kingCol),
+            rookStarts: {
+                kingSide: typeof kingSideRookCol === "number" ? squareFromIndex(0, kingSideRookCol) : null,
+                queenSide: typeof queenSideRookCol === "number" ? squareFromIndex(0, queenSideRookCol) : null
+            },
+            kingTargets: {
+                kingSide: "g8",
+                queenSide: "c8"
+            },
+            rookTargets: {
+                kingSide: "f8",
+                queenSide: "d8"
+            }
+        }
+    };
 }
 
 export default class Chess960 {
@@ -245,6 +330,7 @@ export default class Chess960 {
     createGame(positionInput = this.classicPositionId) {
         const backRank = this.#resolveBackRank(positionInput);
         const board = createEmptyBoard();
+        const castlingConfig = createCastlingConfig(backRank);
 
         backRank.forEach((pieceType, col) => {
             board[0][col] = createPiece(pieceType, "black", 0, col);
@@ -263,7 +349,15 @@ export default class Chess960 {
             moveHistory: [],
             status: "ready",
             winner: null,
-            isCheck: false
+            isCheck: false,
+            enPassantTarget: null,
+            halfmoveClock: 0,
+            fullmoveNumber: 1,
+            castlingConfig,
+            castlingRights: {
+                white: { kingSide: true, queenSide: true },
+                black: { kingSide: true, queenSide: true }
+            }
         };
 
         return this.#syncDerivedState(gameState);
@@ -274,7 +368,19 @@ export default class Chess960 {
             throw new Error("Cannot hydrate invalid game state.");
         }
 
-        const gameState = {
+        const gameState = this.#cloneGameState(rawState);
+
+        return this.#syncDerivedState(gameState);
+    }
+
+    serializeGameState(gameState) {
+        return JSON.parse(JSON.stringify(gameState));
+    }
+
+    #cloneGameState(rawState) {
+        const defaultCastlingConfig = createCastlingConfig(rawState.backRank);
+
+        return {
             positionId: typeof rawState.positionId === "number" ? rawState.positionId : this.getIdFromPosition(rawState.backRank),
             backRank: this.#resolveBackRank(rawState.backRank),
             board: cloneBoard(rawState.board),
@@ -284,14 +390,16 @@ export default class Chess960 {
             moveHistory: Array.isArray(rawState.moveHistory) ? rawState.moveHistory.map((move) => ({ ...move })) : [],
             status: typeof rawState.status === "string" ? rawState.status : "ready",
             winner: rawState.winner ?? null,
-            isCheck: Boolean(rawState.isCheck)
+            isCheck: Boolean(rawState.isCheck),
+            enPassantTarget: typeof rawState.enPassantTarget === "string" ? rawState.enPassantTarget : null,
+            halfmoveClock: Number.isInteger(rawState.halfmoveClock) ? rawState.halfmoveClock : 0,
+            fullmoveNumber: Number.isInteger(rawState.fullmoveNumber) ? rawState.fullmoveNumber : 1,
+            castlingConfig: rawState.castlingConfig ? cloneCastlingConfig(rawState.castlingConfig) : defaultCastlingConfig,
+            castlingRights: rawState.castlingRights ? cloneCastlingRights(rawState.castlingRights) : {
+                white: { kingSide: true, queenSide: true },
+                black: { kingSide: true, queenSide: true }
+            }
         };
-
-        return this.#syncDerivedState(gameState);
-    }
-
-    serializeGameState(gameState) {
-        return JSON.parse(JSON.stringify(gameState));
     }
 
     getPieceAt(gameState, square) {
@@ -346,11 +454,13 @@ export default class Chess960 {
             throw new Error(`Illegal move from ${fromSquare} to ${toSquare}.`);
         }
 
-        const move = this.#applyMove(nextState.board, fromSquare, toSquare, promotion);
+        const move = this.#applyMove(nextState, fromSquare, toSquare, promotion);
+        const movingColor = move.color;
 
         nextState.activeColor = otherColor(nextState.activeColor);
         nextState.selectedSquare = null;
         nextState.legalTargets = [];
+        nextState.fullmoveNumber = movingColor === "black" ? nextState.fullmoveNumber + 1 : nextState.fullmoveNumber;
         nextState.moveHistory = [...nextState.moveHistory, this.#buildMoveRecord(nextState, move)];
 
         return this.#syncDerivedState(nextState);
@@ -366,7 +476,9 @@ export default class Chess960 {
             backRank: cloneBackRank(gameState.backRank),
             board: cloneBoard(gameState.board),
             moveHistory: gameState.moveHistory.map((move) => ({ ...move })),
-            legalTargets: [...gameState.legalTargets]
+            legalTargets: [...gameState.legalTargets],
+            castlingConfig: cloneCastlingConfig(gameState.castlingConfig),
+            castlingRights: cloneCastlingRights(gameState.castlingRights)
         };
 
         if (nextState.selectedSquare) {
@@ -526,14 +638,14 @@ export default class Chess960 {
     }
 
     #getLegalMovesForPiece(gameState, piece) {
-        const pseudoMoves = this.#getPseudoLegalMoves(gameState.board, piece);
+        const pseudoMoves = this.#getPseudoLegalMoves(gameState, piece);
         const legalMoves = [];
 
         pseudoMoves.forEach((targetSquare) => {
-            const boardClone = cloneBoard(gameState.board);
-            this.#applyMove(boardClone, piece.square, targetSquare, "Q");
+            const simulatedState = this.#cloneGameState(gameState);
+            this.#applyMove(simulatedState, piece.square, targetSquare, "Q");
 
-            if (!this.#isSquareAttackedAfterMove(boardClone, piece.color)) {
+            if (!this.#isSquareAttackedAfterMove(simulatedState.board, piece.color)) {
                 legalMoves.push(targetSquare);
             }
         });
@@ -551,26 +663,30 @@ export default class Chess960 {
         return this.#isSquareAttacked(board, kingSquare.row, kingSquare.col, otherColor(color));
     }
 
-    #getPseudoLegalMoves(board, piece) {
+    #getPseudoLegalMoves(gameState, piece) {
         switch (piece.type) {
             case "P":
-                return this.#getPawnMoves(board, piece);
+                return this.#getPawnMoves(gameState, piece);
             case "N":
-                return this.#getKnightMoves(board, piece);
+                return this.#getKnightMoves(gameState.board, piece);
             case "B":
-                return this.#getSlidingMoves(board, piece, PIECE_DIRECTIONS.bishop);
+                return this.#getSlidingMoves(gameState.board, piece, PIECE_DIRECTIONS.bishop);
             case "R":
-                return this.#getSlidingMoves(board, piece, PIECE_DIRECTIONS.rook);
+                return this.#getSlidingMoves(gameState.board, piece, PIECE_DIRECTIONS.rook);
             case "Q":
-                return this.#getSlidingMoves(board, piece, [...PIECE_DIRECTIONS.bishop, ...PIECE_DIRECTIONS.rook]);
+                return this.#getSlidingMoves(gameState.board, piece, [...PIECE_DIRECTIONS.bishop, ...PIECE_DIRECTIONS.rook]);
             case "K":
-                return this.#getKingMoves(board, piece);
+                return [
+                    ...this.#getKingMoves(gameState.board, piece),
+                    ...this.#getCastlingMoves(gameState, piece)
+                ];
             default:
                 return [];
         }
     }
 
-    #getPawnMoves(board, piece) {
+    #getPawnMoves(gameState, piece) {
+        const board = gameState.board;
         const moves = [];
         const direction = piece.color === "white" ? -1 : 1;
         const oneStepRow = piece.row + direction;
@@ -581,7 +697,7 @@ export default class Chess960 {
             const startRow = piece.color === "white" ? 6 : 1;
             const twoStepRow = piece.row + (direction * 2);
 
-            if (piece.row === startRow && !board[twoStepRow][piece.col]) {
+            if (piece.row === startRow && isInsideBoard(twoStepRow, piece.col) && !board[twoStepRow][piece.col]) {
                 moves.push(squareFromIndex(twoStepRow, piece.col));
             }
         }
@@ -597,6 +713,14 @@ export default class Chess960 {
 
             if (targetPiece && targetPiece.color !== piece.color) {
                 moves.push(squareFromIndex(oneStepRow, targetCol));
+                continue;
+            }
+
+            if (gameState.enPassantTarget === squareFromIndex(oneStepRow, targetCol)) {
+                const adjacentPiece = board[piece.row][targetCol];
+                if (adjacentPiece?.type === "P" && adjacentPiece.color !== piece.color) {
+                    moves.push(squareFromIndex(oneStepRow, targetCol));
+                }
             }
         }
 
@@ -647,16 +771,176 @@ export default class Chess960 {
             .map(({ row, col }) => squareFromIndex(row, col));
     }
 
-    #applyMove(board, fromSquare, toSquare, promotion = "Q") {
+    #getCastlingMoves(gameState, kingPiece) {
+        if (kingPiece.type !== "K") {
+            return [];
+        }
+
+        const config = gameState.castlingConfig[kingPiece.color];
+        if (kingPiece.square !== config.kingStart) {
+            return [];
+        }
+
+        const moves = [];
+        ["kingSide", "queenSide"].forEach((side) => {
+            if (this.#canCastle(gameState, kingPiece.color, side)) {
+                moves.push(config.kingTargets[side]);
+            }
+        });
+
+        return moves;
+    }
+
+    #canCastle(gameState, color, side) {
+        if (!gameState.castlingRights[color][side]) {
+            return false;
+        }
+
+        const config = gameState.castlingConfig[color];
+        const rookStart = config.rookStarts[side];
+        const kingStart = config.kingStart;
+
+        if (!rookStart || !kingStart) {
+            return false;
+        }
+
+        const kingPiece = this.getPieceAt(gameState, kingStart);
+        const rookPiece = this.getPieceAt(gameState, rookStart);
+
+        if (!kingPiece || kingPiece.type !== "K" || kingPiece.color !== color || kingPiece.hasMoved) {
+            return false;
+        }
+
+        if (!rookPiece || rookPiece.type !== "R" || rookPiece.color !== color || rookPiece.hasMoved) {
+            return false;
+        }
+
+        const kingStartPos = parseSquare(kingStart);
+        const rookStartPos = parseSquare(rookStart);
+
+        if (kingStartPos.row !== rookStartPos.row) {
+            return false;
+        }
+
+        const boardWithoutCastlePieces = cloneBoard(gameState.board);
+        boardWithoutCastlePieces[kingStartPos.row][kingStartPos.col] = null;
+        boardWithoutCastlePieces[rookStartPos.row][rookStartPos.col] = null;
+
+        const kingTarget = parseSquare(config.kingTargets[side]);
+        const rookTarget = parseSquare(config.rookTargets[side]);
+        const betweenSquares = getLineSquares(kingStartPos.row, kingStartPos.col, rookStartPos.col)
+            .slice(1, -1);
+
+        if (betweenSquares.some((square) => {
+            const position = parseSquare(square);
+            return Boolean(gameState.board[position.row][position.col]);
+        })) {
+            return false;
+        }
+
+        const requiredEmptySquares = new Set([
+            ...getLineSquares(kingStartPos.row, kingStartPos.col, kingTarget.col),
+            ...getLineSquares(rookStartPos.row, rookStartPos.col, rookTarget.col)
+        ]);
+
+        requiredEmptySquares.delete(kingStart);
+        requiredEmptySquares.delete(rookStart);
+
+        for (const square of requiredEmptySquares) {
+            const position = parseSquare(square);
+            if (boardWithoutCastlePieces[position.row][position.col]) {
+                return false;
+            }
+        }
+
+        const kingTravelSquares = getLineSquares(kingStartPos.row, kingStartPos.col, kingTarget.col);
+
+        for (const square of kingTravelSquares) {
+            const position = parseSquare(square);
+            const boardProbe = cloneBoard(boardWithoutCastlePieces);
+            boardProbe[position.row][position.col] = createPiece("K", color, position.row, position.col);
+
+            if (this.#isSquareAttacked(boardProbe, position.row, position.col, otherColor(color))) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    #getCastlingSide(gameState, piece, toSquare) {
+        if (piece.type !== "K") {
+            return null;
+        }
+
+        const config = gameState.castlingConfig[piece.color];
+        if (piece.square !== config.kingStart) {
+            return null;
+        }
+
+        if (toSquare === config.kingTargets.kingSide && this.#canCastle(gameState, piece.color, "kingSide")) {
+            return "kingSide";
+        }
+
+        if (toSquare === config.kingTargets.queenSide && this.#canCastle(gameState, piece.color, "queenSide")) {
+            return "queenSide";
+        }
+
+        return null;
+    }
+
+    #applyMove(gameState, fromSquare, toSquare, promotion = "Q") {
         const from = parseSquare(fromSquare);
         const to = parseSquare(toSquare);
-        const movingPiece = clonePiece(board[from.row][from.col]);
+        const movingPiece = clonePiece(gameState.board[from.row][from.col]);
 
         if (!movingPiece) {
             throw new Error(`No piece on ${fromSquare}.`);
         }
 
-        const capturedPiece = clonePiece(board[to.row][to.col]);
+        const castlingSide = this.#getCastlingSide(gameState, movingPiece, toSquare);
+        const moveContext = {
+            color: movingPiece.color,
+            piece: movingPiece.type,
+            from: from.square,
+            to: to.square,
+            capture: null,
+            promotion: null,
+            isCastle: false,
+            castleSide: null,
+            rookFrom: null,
+            rookTo: null,
+            isEnPassant: false,
+            enPassantTargetBefore: gameState.enPassantTarget,
+            enPassantTargetAfter: null,
+            castlingRightsBefore: cloneCastlingRights(gameState.castlingRights),
+            castlingRightsAfter: null,
+            fullmoveNumber: gameState.fullmoveNumber,
+            halfmoveClockBefore: gameState.halfmoveClock,
+            halfmoveClockAfter: 0
+        };
+
+        if (castlingSide) {
+            return this.#applyCastleMove(gameState, movingPiece, castlingSide, moveContext);
+        }
+
+        const targetPiece = clonePiece(gameState.board[to.row][to.col]);
+        const isDiagonalPawnMove = movingPiece.type === "P" && from.col !== to.col;
+        const isEnPassantCapture = movingPiece.type === "P"
+            && isDiagonalPawnMove
+            && !targetPiece
+            && gameState.enPassantTarget === to.square;
+
+        let capturedPiece = targetPiece;
+
+        gameState.board[from.row][from.col] = null;
+
+        if (isEnPassantCapture) {
+            const captureRow = movingPiece.row;
+            capturedPiece = clonePiece(gameState.board[captureRow][to.col]);
+            gameState.board[captureRow][to.col] = null;
+        }
+
         const nextPiece = {
             ...movingPiece,
             row: to.row,
@@ -667,27 +951,121 @@ export default class Chess960 {
 
         if (movingPiece.type === "P" && (to.row === 0 || to.row === BOARD_SIZE - 1)) {
             nextPiece.type = promotion;
+            moveContext.promotion = promotion;
         }
 
-        board[from.row][from.col] = null;
-        board[to.row][to.col] = nextPiece;
+        gameState.board[to.row][to.col] = nextPiece;
+        gameState.enPassantTarget = null;
 
-        return {
-            color: movingPiece.color,
-            piece: movingPiece.type,
-            from: from.square,
-            to: to.square,
-            capture: capturedPiece?.type ?? null,
-            promotion: nextPiece.type !== movingPiece.type ? nextPiece.type : null
+        if (movingPiece.type === "P" && Math.abs(to.row - from.row) === 2) {
+            gameState.enPassantTarget = squareFromIndex((from.row + to.row) / 2, from.col);
+        }
+
+        this.#updateCastlingRights(gameState, movingPiece, from.square, capturedPiece, to.square);
+
+        moveContext.capture = capturedPiece?.type ?? null;
+        moveContext.to = nextPiece.square;
+        moveContext.isEnPassant = isEnPassantCapture;
+        moveContext.enPassantTargetAfter = gameState.enPassantTarget;
+        moveContext.castlingRightsAfter = cloneCastlingRights(gameState.castlingRights);
+        moveContext.halfmoveClockAfter = movingPiece.type === "P" || capturedPiece ? 0 : gameState.halfmoveClock + 1;
+        gameState.halfmoveClock = moveContext.halfmoveClockAfter;
+
+        return moveContext;
+    }
+
+    #applyCastleMove(gameState, kingPiece, side, moveContext) {
+        const config = gameState.castlingConfig[kingPiece.color];
+        const kingStart = parseSquare(config.kingStart);
+        const rookStart = parseSquare(config.rookStarts[side]);
+        const kingTarget = parseSquare(config.kingTargets[side]);
+        const rookTarget = parseSquare(config.rookTargets[side]);
+        const rookPiece = clonePiece(gameState.board[rookStart.row][rookStart.col]);
+
+        gameState.board[kingStart.row][kingStart.col] = null;
+        gameState.board[rookStart.row][rookStart.col] = null;
+
+        gameState.board[kingTarget.row][kingTarget.col] = {
+            ...kingPiece,
+            row: kingTarget.row,
+            col: kingTarget.col,
+            square: kingTarget.square,
+            hasMoved: true
         };
+        gameState.board[rookTarget.row][rookTarget.col] = {
+            ...rookPiece,
+            row: rookTarget.row,
+            col: rookTarget.col,
+            square: rookTarget.square,
+            hasMoved: true
+        };
+
+        gameState.enPassantTarget = null;
+        gameState.castlingRights[kingPiece.color].kingSide = false;
+        gameState.castlingRights[kingPiece.color].queenSide = false;
+        gameState.halfmoveClock += 1;
+
+        moveContext.to = kingTarget.square;
+        moveContext.isCastle = true;
+        moveContext.castleSide = side;
+        moveContext.rookFrom = rookStart.square;
+        moveContext.rookTo = rookTarget.square;
+        moveContext.enPassantTargetAfter = null;
+        moveContext.castlingRightsAfter = cloneCastlingRights(gameState.castlingRights);
+        moveContext.halfmoveClockAfter = gameState.halfmoveClock;
+
+        return moveContext;
+    }
+
+    #updateCastlingRights(gameState, movingPiece, fromSquare, capturedPiece, toSquare) {
+        const movingColorConfig = gameState.castlingConfig[movingPiece.color];
+        const opponentColor = otherColor(movingPiece.color);
+        const opponentConfig = gameState.castlingConfig[opponentColor];
+
+        if (movingPiece.type === "K") {
+            gameState.castlingRights[movingPiece.color].kingSide = false;
+            gameState.castlingRights[movingPiece.color].queenSide = false;
+        }
+
+        if (movingPiece.type === "R") {
+            if (fromSquare === movingColorConfig.rookStarts.kingSide) {
+                gameState.castlingRights[movingPiece.color].kingSide = false;
+            }
+
+            if (fromSquare === movingColorConfig.rookStarts.queenSide) {
+                gameState.castlingRights[movingPiece.color].queenSide = false;
+            }
+        }
+
+        if (capturedPiece?.type === "R") {
+            if (toSquare === opponentConfig.rookStarts.kingSide) {
+                gameState.castlingRights[opponentColor].kingSide = false;
+            }
+
+            if (toSquare === opponentConfig.rookStarts.queenSide) {
+                gameState.castlingRights[opponentColor].queenSide = false;
+            }
+        }
     }
 
     #buildMoveRecord(gameStateBeforeSync, move) {
-        const moveNumber = Math.floor(gameStateBeforeSync.moveHistory.length / 2) + 1;
-        const notation = `${move.from}${move.capture ? "x" : "-"}${move.to}${move.promotion ? `=${move.promotion}` : ""}`;
+        const ply = gameStateBeforeSync.moveHistory.length + 1;
+        const moveNumber = Math.floor((ply + 1) / 2);
+        let notation = `${move.from}${move.capture ? "x" : "-"}${move.to}`;
+
+        if (move.isCastle) {
+            notation = CASTLE_SIDE_NAMES[move.castleSide];
+        } else if (move.promotion) {
+            notation = `${notation}=${move.promotion}`;
+        }
+
+        if (move.isEnPassant) {
+            notation = `${notation} e.p.`;
+        }
 
         return {
-            id: gameStateBeforeSync.moveHistory.length + 1,
+            id: ply,
+            ply,
             moveNumber,
             color: move.color,
             piece: move.piece,
@@ -695,8 +1073,21 @@ export default class Chess960 {
             to: move.to,
             capture: move.capture,
             promotion: move.promotion,
+            isCastle: move.isCastle,
+            castleSide: move.castleSide,
+            rookFrom: move.rookFrom,
+            rookTo: move.rookTo,
+            isEnPassant: move.isEnPassant,
+            enPassantTargetBefore: move.enPassantTargetBefore,
+            enPassantTargetAfter: move.enPassantTargetAfter,
+            castlingRightsBefore: move.castlingRightsBefore,
+            castlingRightsAfter: move.castlingRightsAfter,
+            halfmoveClockAfter: move.halfmoveClockAfter,
+            fullmoveNumber: move.fullmoveNumber,
             notation,
-            label: `${COLOR_NAMES[move.color]} ${getPieceLabel(move.piece)} ${notation}`
+            label: move.isCastle
+                ? `${COLOR_NAMES[move.color]} castles ${move.castleSide === "kingSide" ? "king side" : "queen side"}`
+                : `${COLOR_NAMES[move.color]} ${getPieceLabel(move.piece)} ${notation}`
         };
     }
 
