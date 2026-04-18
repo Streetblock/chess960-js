@@ -210,7 +210,7 @@ function renderMoveLog(moves) {
     moves.forEach((move) => {
         const item = document.createElement("li");
         item.className = "move-log-item";
-        item.textContent = `${move.moveNumber}. ${COLOR_LABELS[move.color]} ${move.notation}`;
+        item.textContent = `${move.moveNumber}. ${COLOR_LABELS[move.color]} ${move.san ?? move.notation}`;
         moveLog.appendChild(item);
     });
 }

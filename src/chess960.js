@@ -499,6 +499,36 @@ export default class Chess960 {
         return this.#syncDerivedState(gameState);
     }
 
+    exportPGN(gameState, options = {}) {
+        const normalizedState = this.hydrateGameState(gameState);
+        const headers = {
+            Event: "Casual Game",
+            Site: "?",
+            Date: "????.??.??",
+            Round: "?",
+            White: "White",
+            Black: "Black",
+            Result: this.#getPgnResult(normalizedState),
+            Variant: "Chess960",
+            ...options.headers
+        };
+        const startingState = this.createGame(normalizedState.backRank);
+        const startingFen = this.exportFEN(startingState);
+        const includeSetup = options.includeSetup ?? normalizedState.positionId !== this.classicPositionId;
+
+        if (includeSetup) {
+            headers.SetUp = "1";
+            headers.FEN = startingFen;
+        }
+
+        const headerSection = Object.entries(headers)
+            .map(([key, value]) => `[${key} "${value}"]`)
+            .join("\n");
+        const moveSection = this.#formatPgnMoves(normalizedState.moveHistory, headers.Result);
+
+        return `${headerSection}\n\n${moveSection}`.trim();
+    }
+
     #cloneGameState(rawState) {
         const defaultCastlingConfig = createCastlingConfig(rawState.backRank);
 
@@ -744,6 +774,124 @@ export default class Chess960 {
         return true;
     }
 
+    #annotateLastMove(previousState, move, syncedState) {
+        if (syncedState.moveHistory.length === 0) {
+            return syncedState;
+        }
+
+        const nextState = this.#cloneGameState(syncedState);
+        const lastMoveIndex = nextState.moveHistory.length - 1;
+        const san = this.#buildSan(previousState, move, syncedState);
+        const notation = nextState.moveHistory[lastMoveIndex].notation;
+
+        nextState.moveHistory[lastMoveIndex] = {
+            ...nextState.moveHistory[lastMoveIndex],
+            san,
+            label: `${COLOR_NAMES[move.color]} ${getPieceLabel(move.piece)} ${san}`,
+            pgn: san,
+            longAlgebraic: notation
+        };
+
+        return nextState;
+    }
+
+    #buildSan(previousState, move, resultingState) {
+        let san;
+
+        if (move.isCastle) {
+            san = CASTLE_SIDE_NAMES[move.castleSide];
+        } else {
+            const pieceLetter = move.piece === "P" ? "" : move.piece;
+            const disambiguation = move.piece === "P" ? "" : this.#getSanDisambiguation(previousState, move);
+            const captureToken = move.capture || move.isEnPassant ? "x" : "";
+            const destination = move.to;
+            const promotionSuffix = move.promotion ? `=${move.promotion}` : "";
+            const pawnPrefix = move.piece === "P" && captureToken ? move.from[0] : "";
+            san = `${pieceLetter}${disambiguation}${pawnPrefix}${captureToken}${destination}${promotionSuffix}`;
+        }
+
+        if (resultingState.status === "checkmate" && resultingState.winner === move.color) {
+            return `${san}#`;
+        }
+
+        if (resultingState.status === "check") {
+            return `${san}+`;
+        }
+
+        return san;
+    }
+
+    #getSanDisambiguation(gameState, move) {
+        const candidates = [];
+
+        for (let row = 0; row < BOARD_SIZE; row += 1) {
+            for (let col = 0; col < BOARD_SIZE; col += 1) {
+                const piece = gameState.board[row][col];
+
+                if (!piece || piece.color !== move.color || piece.type !== move.piece || piece.square === move.from) {
+                    continue;
+                }
+
+                if (this.getLegalMoves(gameState, piece.square).includes(move.to)) {
+                    candidates.push(piece);
+                }
+            }
+        }
+
+        if (candidates.length === 0) {
+            return "";
+        }
+
+        const from = parseSquare(move.from);
+        const sameFile = candidates.some((piece) => piece.col === from.col);
+        const sameRank = candidates.some((piece) => piece.row === from.row);
+
+        if (!sameFile) {
+            return move.from[0];
+        }
+
+        if (!sameRank) {
+            return move.from[1];
+        }
+
+        return move.from;
+    }
+
+    #getPgnResult(gameState) {
+        if (gameState.status === "checkmate") {
+            return gameState.winner === "white" ? "1-0" : "0-1";
+        }
+
+        if (gameState.status === "stalemate") {
+            return "1/2-1/2";
+        }
+
+        return "*";
+    }
+
+    #formatPgnMoves(moveHistory, result) {
+        if (moveHistory.length === 0) {
+            return result;
+        }
+
+        const tokens = [];
+
+        for (let index = 0; index < moveHistory.length; index += 1) {
+            const move = moveHistory[index];
+
+            if (move.color === "white") {
+                tokens.push(`${move.moveNumber}. ${move.san ?? move.notation}`);
+            } else if (index === 0) {
+                tokens.push(`${move.moveNumber}... ${move.san ?? move.notation}`);
+            } else {
+                tokens.push(move.san ?? move.notation);
+            }
+        }
+
+        tokens.push(result);
+        return tokens.join(" ");
+    }
+
     getPieceAt(gameState, square) {
         const { row, col } = parseSquare(square);
         return gameState.board[row][col];
@@ -789,8 +937,9 @@ export default class Chess960 {
     }
 
     movePiece(gameState, fromSquare, toSquare, promotion = "Q") {
-        const nextState = this.hydrateGameState(gameState);
-        const legalMoves = this.getLegalMoves(nextState, fromSquare);
+        const previousState = this.hydrateGameState(gameState);
+        const nextState = this.#cloneGameState(previousState);
+        const legalMoves = this.getLegalMoves(previousState, fromSquare);
 
         if (!legalMoves.includes(toSquare)) {
             throw new Error(`Illegal move from ${fromSquare} to ${toSquare}.`);
@@ -803,9 +952,10 @@ export default class Chess960 {
         nextState.selectedSquare = null;
         nextState.legalTargets = [];
         nextState.fullmoveNumber = movingColor === "black" ? nextState.fullmoveNumber + 1 : nextState.fullmoveNumber;
-        nextState.moveHistory = [...nextState.moveHistory, this.#buildMoveRecord(nextState, move)];
+        nextState.moveHistory = [...nextState.moveHistory, this.#buildMoveRecord(previousState, move)];
 
-        return this.#syncDerivedState(nextState);
+        const syncedState = this.#syncDerivedState(nextState);
+        return this.#annotateLastMove(previousState, move, syncedState);
     }
 
     resetGame(positionInput = this.classicPositionId) {
@@ -1427,6 +1577,9 @@ export default class Chess960 {
             halfmoveClockAfter: move.halfmoveClockAfter,
             fullmoveNumber: move.fullmoveNumber,
             notation,
+            san: null,
+            pgn: null,
+            longAlgebraic: notation,
             label: move.isCastle
                 ? `${COLOR_NAMES[move.color]} castles ${move.castleSide === "kingSide" ? "king side" : "queen side"}`
                 : `${COLOR_NAMES[move.color]} ${getPieceLabel(move.piece)} ${notation}`
