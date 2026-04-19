@@ -438,7 +438,11 @@ function importPgn() {
             backRank: gameState?.backRank
         });
         applyImportedGameState(imported.gameState);
-        setNotationStatus("PGN erfolgreich importiert.");
+        if (imported.warnings?.length) {
+            setNotationStatus(`PGN importiert mit Hinweis: ${imported.warnings.join(" ")}`);
+        } else {
+            setNotationStatus("PGN erfolgreich importiert.");
+        }
     } catch (error) {
         console.error("PGN import failed", error);
         setNotationStatus(`PGN-Import fehlgeschlagen: ${error.message}`, true);

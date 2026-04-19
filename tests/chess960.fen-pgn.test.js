@@ -111,5 +111,18 @@ export default [
             assert.equal(imported.headers.Site, "Berlin");
             assert.equal(imported.headers.Result, "*");
         }
+    },
+    {
+        name: "warns when Chess960 PGN omits FEN setup and falls back to 518",
+        run() {
+            const engine = new Chess960();
+            const pgn = `[Event "Loose Chess960"]\n[Variant "Chess960"]\n[Result "*"]\n\n1. e4 e5 *`;
+            const imported = engine.importPGN(pgn);
+
+            assert.equal(imported.gameState.positionId, 518);
+            assert.equal(imported.gameState.moveHistory.map((move) => move.san).join(" "), "e4 e5");
+            assert.equal(imported.warnings.length, 1);
+            assert.match(imported.warnings[0], /FEN start position/);
+        }
     }
 ];

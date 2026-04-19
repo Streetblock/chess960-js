@@ -586,6 +586,7 @@ export default class Chess960 {
 
         const { headers, movetext } = this.#parsePgnDocument(pgn);
         let gameState;
+        const warnings = [];
 
         if (headers.FEN) {
             const fenOptions = {
@@ -603,6 +604,9 @@ export default class Chess960 {
                 : (options.backRank ?? options.positionInput);
             gameState = this.createGame(positionInput);
         } else {
+            if (headers.Variant === "Chess960") {
+                warnings.push("PGN declares Variant \"Chess960\" without a FEN start position. Falling back to classical start position 518.");
+            }
             gameState = this.createGame(this.classicPositionId);
         }
 
@@ -618,7 +622,8 @@ export default class Chess960 {
 
         return {
             headers,
-            gameState
+            gameState,
+            warnings
         };
     }
 
