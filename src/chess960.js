@@ -402,6 +402,9 @@ export default class Chess960 {
             enPassantTarget: null,
             halfmoveClock: 0,
             fullmoveNumber: 1,
+            positionHistory: [],
+            drawReason: null,
+            claimableDraws: [],
             castlingConfig,
             castlingRights: {
                 white: { kingSide: true, queenSide: true },
@@ -492,6 +495,9 @@ export default class Chess960 {
             enPassantTarget,
             halfmoveClock,
             fullmoveNumber,
+            positionHistory: [],
+            drawReason: null,
+            claimableDraws: [],
             castlingConfig,
             castlingRights
         };
@@ -610,6 +616,9 @@ export default class Chess960 {
             enPassantTarget: typeof rawState.enPassantTarget === "string" ? rawState.enPassantTarget : null,
             halfmoveClock: Number.isInteger(rawState.halfmoveClock) ? rawState.halfmoveClock : 0,
             fullmoveNumber: Number.isInteger(rawState.fullmoveNumber) ? rawState.fullmoveNumber : 1,
+            positionHistory: Array.isArray(rawState.positionHistory) ? [...rawState.positionHistory] : [],
+            drawReason: typeof rawState.drawReason === "string" ? rawState.drawReason : null,
+            claimableDraws: Array.isArray(rawState.claimableDraws) ? [...rawState.claimableDraws] : [],
             castlingConfig: rawState.castlingConfig ? cloneCastlingConfig(rawState.castlingConfig) : defaultCastlingConfig,
             castlingRights: rawState.castlingRights ? cloneCastlingRights(rawState.castlingRights) : {
                 white: { kingSide: true, queenSide: true },
@@ -853,7 +862,8 @@ export default class Chess960 {
             san,
             label: `${COLOR_NAMES[move.color]} ${getPieceLabel(move.piece)} ${san}`,
             pgn: san,
-            longAlgebraic: notation
+            longAlgebraic: notation,
+            positionKeyAfter: syncedState.positionHistory.at(-1) ?? null
         };
 
         return nextState;
@@ -926,7 +936,7 @@ export default class Chess960 {
             return gameState.winner === "white" ? "1-0" : "0-1";
         }
 
-        if (gameState.status === "stalemate") {
+        if (gameState.status === "stalemate" || gameState.status === "draw") {
             return "1/2-1/2";
         }
 
@@ -1012,6 +1022,104 @@ export default class Chess960 {
             .trim()
             .replace(/[!?]+/g, "")
             .replace(/\s+/g, "");
+    }
+
+    #getRepetitionKey(gameState) {
+        const placement = boardToFenPlacement(gameState.board);
+        const activeColor = gameState.activeColor === "black" ? "b" : "w";
+        const castlingRights = this.#formatFenCastlingRights(gameState, "shredder");
+        const enPassantTarget = this.#getCanonicalEnPassantTarget(gameState) ?? "-";
+
+        return `${placement} ${activeColor} ${castlingRights} ${enPassantTarget}`;
+    }
+
+    #getCanonicalEnPassantTarget(gameState) {
+        if (!gameState.enPassantTarget) {
+            return null;
+        }
+
+        const target = parseSquare(gameState.enPassantTarget);
+        const sourceRow = gameState.activeColor === "white" ? target.row + 1 : target.row - 1;
+
+        for (const offset of [-1, 1]) {
+            const sourceCol = target.col + offset;
+
+            if (!isInsideBoard(sourceRow, sourceCol)) {
+                continue;
+            }
+
+            const piece = gameState.board[sourceRow][sourceCol];
+            if (piece?.type === "P" && piece.color === gameState.activeColor) {
+                return gameState.enPassantTarget;
+            }
+        }
+
+        return null;
+    }
+
+    #getClaimableDraws(gameState, repetitionCount) {
+        const claimableDraws = [];
+
+        if (gameState.halfmoveClock >= 100) {
+            claimableDraws.push("fiftyMoveRule");
+        }
+
+        if (repetitionCount >= 3) {
+            claimableDraws.push("threefoldRepetition");
+        }
+
+        return claimableDraws;
+    }
+
+    #getAutomaticDrawReason(gameState, repetitionCount) {
+        if (this.#hasInsufficientMaterial(gameState.board)) {
+            return "insufficientMaterial";
+        }
+
+        if (repetitionCount >= 5) {
+            return "fivefoldRepetition";
+        }
+
+        if (gameState.halfmoveClock >= 150) {
+            return "seventyFiveMoveRule";
+        }
+
+        return null;
+    }
+
+    #hasInsufficientMaterial(board) {
+        const pieces = [];
+
+        for (let row = 0; row < BOARD_SIZE; row += 1) {
+            for (let col = 0; col < BOARD_SIZE; col += 1) {
+                const piece = board[row][col];
+
+                if (!piece || piece.type === "K") {
+                    continue;
+                }
+
+                pieces.push(piece);
+            }
+        }
+
+        if (pieces.length === 0) {
+            return true;
+        }
+
+        if (pieces.some((piece) => ["Q", "R", "P"].includes(piece.type))) {
+            return false;
+        }
+
+        if (pieces.length === 1 && ["B", "N"].includes(pieces[0].type)) {
+            return true;
+        }
+
+        if (pieces.length === 2 && pieces.every((piece) => piece.type === "B")) {
+            const bishopColors = pieces.map((piece) => (piece.row + piece.col) % 2);
+            return bishopColors[0] === bishopColors[1];
+        }
+
+        return false;
     }
 
     #enumerateLegalMoves(gameState) {
@@ -1148,6 +1256,9 @@ export default class Chess960 {
             board: cloneBoard(gameState.board),
             moveHistory: gameState.moveHistory.map((move) => ({ ...move })),
             legalTargets: [...gameState.legalTargets],
+            positionHistory: Array.isArray(gameState.positionHistory) ? [...gameState.positionHistory] : [],
+            drawReason: gameState.drawReason ?? null,
+            claimableDraws: Array.isArray(gameState.claimableDraws) ? [...gameState.claimableDraws] : [],
             castlingConfig: cloneCastlingConfig(gameState.castlingConfig),
             castlingRights: cloneCastlingRights(gameState.castlingRights)
         };
@@ -1164,11 +1275,27 @@ export default class Chess960 {
             nextState.legalTargets = [];
         }
 
+        const currentPositionKey = this.#getRepetitionKey(nextState);
+
+        if (nextState.positionHistory.length === 0) {
+            nextState.positionHistory = [currentPositionKey];
+        } else if (nextState.positionHistory.length === nextState.moveHistory.length) {
+            nextState.positionHistory = [...nextState.positionHistory, currentPositionKey];
+        } else if (nextState.positionHistory.length !== nextState.moveHistory.length + 1) {
+            nextState.positionHistory = [currentPositionKey];
+        }
+
+        const repetitionCount = nextState.positionHistory.filter((key) => key === currentPositionKey).length;
+        const automaticDrawReason = this.#getAutomaticDrawReason(nextState, repetitionCount);
+        const claimableDraws = this.#getClaimableDraws(nextState, repetitionCount);
+
         const sideToMove = nextState.activeColor;
         const kingInCheck = this.isKingInCheck(nextState, sideToMove);
         const hasMove = this.#hasAnyLegalMove(nextState, sideToMove);
 
         nextState.isCheck = kingInCheck;
+        nextState.drawReason = null;
+        nextState.claimableDraws = claimableDraws;
 
         if (!hasMove && kingInCheck) {
             nextState.status = "checkmate";
@@ -1176,6 +1303,10 @@ export default class Chess960 {
         } else if (!hasMove) {
             nextState.status = "stalemate";
             nextState.winner = null;
+        } else if (automaticDrawReason) {
+            nextState.status = "draw";
+            nextState.winner = null;
+            nextState.drawReason = automaticDrawReason;
         } else if (kingInCheck) {
             nextState.status = "check";
             nextState.winner = null;
@@ -1759,6 +1890,7 @@ export default class Chess960 {
             san: null,
             pgn: null,
             longAlgebraic: notation,
+            positionKeyAfter: null,
             label: move.isCastle
                 ? `${COLOR_NAMES[move.color]} castles ${move.castleSide === "kingSide" ? "king side" : "queen side"}`
                 : `${COLOR_NAMES[move.color]} ${getPieceLabel(move.piece)} ${notation}`

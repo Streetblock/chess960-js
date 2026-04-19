@@ -28,7 +28,8 @@ const STATUS_LABELS = {
     active: "Partie l\u00e4uft",
     check: "Schach",
     checkmate: "Schachmatt",
-    stalemate: "Patt"
+    stalemate: "Patt",
+    draw: "Remis"
 };
 
 const chess960 = new Chess960();
@@ -198,6 +199,16 @@ function renderGameStatus(state) {
 
     if (state.status === "stalemate") {
         gameStatusDisplay.textContent = "Patt";
+        return;
+    }
+
+    if (state.status === "draw") {
+        const drawReasonLabels = {
+            insufficientMaterial: "Remis durch unzureichendes Material",
+            fivefoldRepetition: "Remis durch fuenffache Stellungswiederholung",
+            seventyFiveMoveRule: "Remis nach 75-Zuege-Regel"
+        };
+        gameStatusDisplay.textContent = drawReasonLabels[state.drawReason] ?? "Remis";
         return;
     }
 
