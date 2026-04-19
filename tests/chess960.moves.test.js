@@ -60,5 +60,25 @@ export default [
             assert.equal(engine.isPromotionMove(game, "a7", "a6"), false);
             assert.throws(() => engine.movePiece(game, "a7", "a8", "K"), /Promotion piece must be one of/);
         }
+    },
+    {
+        name: "detects stalemate after queen promotion and allows underpromotion to avoid it",
+        run() {
+            const engine = new Chess960();
+            const game = engine.importFEN("8/1P6/k7/8/K7/8/8/8 w - - 0 1", {
+                backRank: ["R", "N", "B", "Q", "K", "B", "N", "R"]
+            });
+
+            const queenPromotion = engine.movePiece(game, "b7", "b8", "Q");
+            const rookPromotion = engine.movePiece(game, "b7", "b8", "R");
+
+            assert.equal(queenPromotion.status, "stalemate");
+            assert.equal(queenPromotion.winner, null);
+            assert.equal(queenPromotion.moveHistory.at(-1)?.san, "b8=Q");
+
+            assert.equal(rookPromotion.status, "active");
+            assert.equal(rookPromotion.winner, null);
+            assert.equal(rookPromotion.moveHistory.at(-1)?.san, "b8=R");
+        }
     }
 ];
