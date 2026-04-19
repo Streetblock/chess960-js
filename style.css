@@ -175,15 +175,20 @@ hr {
 
 .board-square {
     width: 100%;
+    min-width: 0;
     aspect-ratio: 1 / 1;
     display: flex;
     justify-content: center;
     align-items: center;
+    padding: 0;
+    margin: 0;
+    flex: 0 0 auto;
     font-size: clamp(20px, 7vw, 38px); /* Dynamic piece size */
     cursor: pointer;
     user-select: none;
     border: none;
     border-radius: 0;
+    min-height: 0;
     transition: transform 0.12s ease, box-shadow 0.12s ease, filter 0.12s ease;
 }
 
