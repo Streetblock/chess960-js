@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="de">
 <head>
     <meta charset="UTF-8">
@@ -65,9 +65,12 @@
             <p>Am Zug: <strong id="activeColor">Weiß</strong></p>
             <p>Status: <strong id="gameStatus">Bereit</strong></p>
             <div class="history-actions">
+                <button id="historyStartBtn" type="button">Anfang</button>
                 <button id="undoBtn" type="button">Zug zurück</button>
                 <button id="redoBtn" type="button">Zug vor</button>
+                <button id="historyEndBtn" type="button">Aktuell</button>
             </div>
+            <p id="historyStatus" class="history-status">Live-Ansicht.</p>
         </div>
         <div id="drawPanel" class="draw-panel hidden">
             <p id="drawHint" class="draw-hint">Remis kann beansprucht werden.</p>
@@ -117,3 +120,5 @@
     <script type="module" src="app.js"></script>
 </body>
 </html>
+
+

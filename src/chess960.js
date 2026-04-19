@@ -1344,6 +1344,24 @@ export default class Chess960 {
         return this.hydrateGameState(gameState).canRedo;
     }
 
+    goToHistoryIndex(gameState, historyIndex) {
+        const normalizedState = this.hydrateGameState(gameState);
+
+        if (!Number.isInteger(historyIndex)) {
+            throw new Error("History index must be an integer.");
+        }
+
+        if (historyIndex < 0 || historyIndex >= normalizedState.stateHistory.length) {
+            throw new Error(`History index out of range: ${historyIndex}`);
+        }
+
+        return this.#restoreHistoryState(normalizedState, historyIndex);
+    }
+
+    getHistoryLength(gameState) {
+        return this.hydrateGameState(gameState).stateHistory.length;
+    }
+
     #restoreHistoryState(gameState, historyIndex) {
         const snapshot = gameState.stateHistory[historyIndex];
 

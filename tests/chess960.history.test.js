@@ -88,5 +88,35 @@ export default [
             assert.equal(engine.exportFEN(undone), "4k3/8/8/8/8/8/4P3/4K3 w - - 0 1");
             assert.equal(engine.exportFEN(redone), engine.exportFEN(game));
         }
+    },
+    {
+        name: "jumps to arbitrary history index",
+        run() {
+            const engine = new Chess960();
+            let game = engine.createGame(518);
+
+            game = engine.movePiece(game, "e2", "e4");
+            game = engine.movePiece(game, "e7", "e5");
+            game = engine.movePiece(game, "g1", "f3");
+
+            const jumped = engine.goToHistoryIndex(game, 2);
+
+            assert.equal(jumped.historyIndex, 2);
+            assert.equal(engine.exportFEN(jumped), "rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w HAha e6 0 2");
+            assert.equal(engine.getHistoryLength(jumped), 4);
+            assert.equal(jumped.canUndo, true);
+            assert.equal(jumped.canRedo, true);
+        }
+    },
+    {
+        name: "rejects invalid history indices",
+        run() {
+            const engine = new Chess960();
+            const game = engine.createGame(518);
+
+            assert.throws(() => engine.goToHistoryIndex(game, -1), /History index out of range/);
+            assert.throws(() => engine.goToHistoryIndex(game, 2), /History index out of range/);
+            assert.throws(() => engine.goToHistoryIndex(game, 0.5), /History index must be an integer/);
+        }
     }
 ];

@@ -250,6 +250,12 @@ button:active { transform: scale(0.98); }
     transform: none;
 }
 
+.history-status {
+    margin-top: 12px;
+    font-size: 14px;
+    color: #5d6d7e;
+}
+
 hr {
     border: 0;
     height: 1px;
@@ -320,6 +326,24 @@ hr {
     margin: 6px 0;
     font-size: 15px;
     color: #2c3e50;
+}
+
+.move-log-item {
+    list-style: decimal;
+    cursor: pointer;
+    border-radius: 6px;
+    padding: 4px 6px;
+    transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.move-log-item:hover {
+    background-color: #e8eef7;
+}
+
+.move-log-item.active {
+    background-color: #d7e7fb;
+    color: #1f4f82;
+    font-weight: 700;
 }
 
 .notation-label {

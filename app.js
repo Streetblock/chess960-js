@@ -1,4 +1,4 @@
-import Chess960 from "./src/chess960.js";
+﻿import Chess960 from "./src/chess960.js";
 
 const UI_STORAGE_KEY = "chess960.ui-state";
 const GAME_STORAGE_KEY = "chess960.game-state";
@@ -22,7 +22,7 @@ const BLACK_SYMBOLS = {
 const PROMOTION_LABELS = {
     Q: "Dame",
     R: "Turm",
-    B: "Laeufer",
+    B: "Läufer",
     N: "Springer"
 };
 const COLOR_LABELS = {
@@ -51,8 +51,11 @@ const resetBtn = document.getElementById("resetBtn");
 const restartGameBtn = document.getElementById("restartGameBtn");
 const activeColorDisplay = document.getElementById("activeColor");
 const gameStatusDisplay = document.getElementById("gameStatus");
+const historyStartBtn = document.getElementById("historyStartBtn");
 const undoBtn = document.getElementById("undoBtn");
 const redoBtn = document.getElementById("redoBtn");
+const historyEndBtn = document.getElementById("historyEndBtn");
+const historyStatus = document.getElementById("historyStatus");
 const promotionPanel = document.getElementById("promotionPanel");
 const promotionHint = document.getElementById("promotionHint");
 const promotionButtons = Array.from(document.querySelectorAll(".promotion-btn"));
@@ -133,13 +136,14 @@ function renderInvalidBackRank(backRank) {
     currentIdDisplay.textContent = "-";
     errorMsg.classList.remove("hidden");
     reverseIdDisplay.className = "error";
-    reverseIdDisplay.textContent = "Ungueltige Aufstellung";
+    reverseIdDisplay.textContent = "Ungültige Aufstellung";
     fullBoardContainer.innerHTML = "";
     copyBtn.disabled = true;
     copyBtn.style.opacity = "0.5";
     activeColorDisplay.textContent = "-";
     gameStatusDisplay.textContent = "Warte auf gueltige Startaufstellung";
     renderHistoryActions(null);
+    renderHistoryStatus(null);
     renderPromotionPanel();
     moveLog.innerHTML = '<li class="move-log-empty">Noch keine Partie gestartet.</li>';
     persistUiState({
@@ -157,7 +161,7 @@ function renderValidBackRank(backRank, currentId) {
     currentIdDisplay.textContent = currentId;
     errorMsg.classList.add("hidden");
     reverseIdDisplay.className = "success";
-    reverseIdDisplay.textContent = `Gueltige ID: ${currentId}`;
+    reverseIdDisplay.textContent = `Gültige ID: ${currentId}`;
     copyBtn.disabled = false;
     copyBtn.style.opacity = "1";
     applyBackRankToInputs(backRank);
@@ -172,6 +176,7 @@ function renderGame() {
     renderBoard(gameState);
     renderGameStatus(gameState);
     renderHistoryActions(gameState);
+    renderHistoryStatus(gameState);
     renderPromotionPanel();
     renderDrawPanel(gameState);
     renderMoveLog(gameState.moveHistory);
@@ -230,7 +235,7 @@ function renderGameStatus(state) {
         const drawReasonLabels = {
             insufficientMaterial: "Remis durch unzureichendes Material",
             fivefoldRepetition: "Remis durch fuenffache Stellungswiederholung",
-            seventyFiveMoveRule: "Remis nach 75-Zuege-Regel"
+            seventyFiveMoveRule: "Remis nach 75-Züge-Regel"
         };
         gameStatusDisplay.textContent = drawReasonLabels[state.drawReason] ?? "Remis";
         return;
@@ -271,11 +276,41 @@ function renderDrawPanel(state) {
 }
 
 function renderHistoryActions(state) {
+    if (!state) {
+        historyStartBtn.disabled = true;
+        undoBtn.disabled = true;
+        redoBtn.disabled = true;
+        historyEndBtn.disabled = true;
+        return;
+    }
+
     const canUndo = Boolean(state?.canUndo);
     const canRedo = Boolean(state?.canRedo);
+    const hasHistory = Boolean(state && chess960.getHistoryLength(state) > 1);
 
+    historyStartBtn.disabled = !hasHistory || state.historyIndex === 0;
     undoBtn.disabled = !canUndo;
     redoBtn.disabled = !canRedo;
+    historyEndBtn.disabled = !hasHistory || state.historyIndex === chess960.getHistoryLength(state) - 1;
+}
+
+function renderHistoryStatus(state) {
+    if (!state) {
+        historyStatus.textContent = "Keine Historie geladen.";
+        return;
+    }
+
+    const currentPly = state.historyIndex;
+    const totalPlies = Math.max(0, chess960.getHistoryLength(state) - 1);
+
+    if (currentPly === totalPlies) {
+        historyStatus.textContent = totalPlies === 0
+            ? "Live-Ansicht. Noch keine Züge gespielt."
+            : `Live-Ansicht auf Halbzug ${currentPly}/${totalPlies}.`;
+        return;
+    }
+
+    historyStatus.textContent = `Replay-Modus auf Halbzug ${currentPly}/${totalPlies}. Brett ist schreibgeschützt.`;
 }
 
 function renderPromotionPanel() {
@@ -285,7 +320,7 @@ function renderPromotionPanel() {
     }
 
     const colorLabel = COLOR_LABELS[pendingPromotion.color];
-    promotionHint.textContent = `${colorLabel} wandelt auf ${pendingPromotion.to} um. Bitte Figur waehlen.`;
+    promotionHint.textContent = `${colorLabel} wandelt auf ${pendingPromotion.to} um. Bitte Figur wählen.`;
     promotionPanel.classList.remove("hidden");
 }
 
@@ -293,20 +328,29 @@ function renderMoveLog(moves) {
     moveLog.innerHTML = "";
 
     if (moves.length === 0) {
-        moveLog.innerHTML = '<li class="move-log-empty">Noch keine Zuege ausgefuehrt.</li>';
+        moveLog.innerHTML = '<li class="move-log-empty">Noch keine Züge ausgeführt.</li>';
         return;
     }
 
     moves.forEach((move) => {
         const item = document.createElement("li");
         item.className = "move-log-item";
+        if (gameState?.historyIndex === move.ply) {
+            item.classList.add("active");
+        }
         item.textContent = `${move.moveNumber}. ${COLOR_LABELS[move.color]} ${move.san ?? move.notation}`;
+        item.addEventListener("click", () => jumpToHistory(move.ply));
         moveLog.appendChild(item);
     });
 }
 
 function handleBoardClick(square) {
     if (!gameState) {
+        return;
+    }
+
+    if (gameState.historyIndex !== chess960.getHistoryLength(gameState) - 1) {
+        setNotationStatus("Replay-Modus aktiv. Bitte zuerst zur aktuellen Stellung zurückkehren.", true);
         return;
     }
 
@@ -465,6 +509,23 @@ function claimDraw(reason) {
     }
 }
 
+function jumpToHistory(historyIndex) {
+    if (!gameState) {
+        return;
+    }
+
+    try {
+        pendingPromotion = null;
+        gameState = chess960.goToHistoryIndex(gameState, historyIndex);
+        renderGame();
+        persistGameState();
+        setNotationStatus(`Zu Halbzug ${historyIndex} gesprungen.`);
+    } catch (error) {
+        console.error("History jump failed", error);
+        setNotationStatus(`Historien-Sprung fehlgeschlagen: ${error.message}`, true);
+    }
+}
+
 function undoMove() {
     if (!gameState) {
         return;
@@ -497,6 +558,18 @@ function redoMove() {
         console.error("Redo failed", error);
         setNotationStatus(`Redo fehlgeschlagen: ${error.message}`, true);
     }
+}
+
+function jumpToStart() {
+    jumpToHistory(0);
+}
+
+function jumpToLatest() {
+    if (!gameState) {
+        return;
+    }
+
+    jumpToHistory(chess960.getHistoryLength(gameState) - 1);
 }
 
 function getSymbolForPiece(piece) {
@@ -610,8 +683,10 @@ resetBtn.addEventListener("click", () => {
 
 restartGameBtn.addEventListener("click", restartCurrentGame);
 copyBtn.addEventListener("click", copyToClipboard);
+historyStartBtn.addEventListener("click", jumpToStart);
 undoBtn.addEventListener("click", undoMove);
 redoBtn.addEventListener("click", redoMove);
+historyEndBtn.addEventListener("click", jumpToLatest);
 promotionButtons.forEach((button) => {
     button.addEventListener("click", () => confirmPromotion(button.dataset.promotionPiece));
 });
@@ -641,3 +716,4 @@ claimFiftyMoveBtn.addEventListener("click", () => claimDraw("fiftyMoveRule"));
 
 initializeDropdowns();
 restoreInitialState();
+
