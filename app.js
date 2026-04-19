@@ -349,20 +349,66 @@ function renderMoveLog(moves) {
     moveLog.innerHTML = "";
 
     if (moves.length === 0) {
-        moveLog.innerHTML = '<li class="move-log-empty">Noch keine Züge ausgeführt.</li>';
+        moveLog.innerHTML = '<p class="move-log-empty">Noch keine Züge ausgeführt.</p>';
         return;
     }
 
+    const rows = [];
+
     moves.forEach((move) => {
-        const item = document.createElement("li");
-        item.className = "move-log-item";
-        if (gameState?.historyIndex === move.ply) {
-            item.classList.add("active");
+        const rowIndex = move.moveNumber - 1;
+
+        if (!rows[rowIndex]) {
+            rows[rowIndex] = {
+                moveNumber: move.moveNumber,
+                white: null,
+                black: null
+            };
         }
-        item.textContent = `${move.moveNumber}. ${COLOR_LABELS[move.color]} ${move.san ?? move.notation}`;
-        item.addEventListener("click", () => jumpToHistory(move.ply));
-        moveLog.appendChild(item);
+
+        rows[rowIndex][move.color] = move;
     });
+
+    rows.forEach((row) => {
+        const rowElement = document.createElement("div");
+        rowElement.className = "move-log-row";
+
+        const numberElement = document.createElement("div");
+        numberElement.className = "move-log-number";
+        numberElement.textContent = `${row.moveNumber}.`;
+        rowElement.appendChild(numberElement);
+
+        rowElement.appendChild(createMoveLogCell(row.white, "Weiß"));
+        rowElement.appendChild(createMoveLogCell(row.black, "Schwarz"));
+
+        moveLog.appendChild(rowElement);
+    });
+}
+
+function createMoveLogCell(move, fallbackLabel) {
+    const cell = document.createElement("div");
+    cell.className = "move-log-cell";
+
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "move-log-item";
+
+    if (!move) {
+        button.classList.add("empty");
+        button.disabled = true;
+        button.textContent = `${fallbackLabel} -`;
+        cell.appendChild(button);
+        return cell;
+    }
+
+    if (gameState?.historyIndex === move.ply) {
+        button.classList.add("active");
+    }
+
+    button.textContent = `${fallbackLabel} ${move.san ?? move.notation}`;
+    button.addEventListener("click", () => jumpToHistory(move.ply));
+    cell.appendChild(button);
+    return cell;
 }
 
 function handleBoardClick(square) {

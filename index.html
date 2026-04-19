@@ -61,44 +61,50 @@
 
         <!-- Full 8x8 Chessboard Render Target -->
         <h2>Komplettes Spielfeld</h2>
-        <div class="game-status-panel">
-            <p>Am Zug: <strong id="activeColor">Weiß</strong></p>
-            <p>Status: <strong id="gameStatus">Bereit</strong></p>
-            <div class="history-actions">
-                <button id="historyStartBtn" type="button">Anfang</button>
-                <button id="undoBtn" type="button">Zug zurück</button>
-                <button id="redoBtn" type="button">Zug vor</button>
-                <button id="historyEndBtn" type="button">Aktuell</button>
-                <button id="historyPlayBtn" type="button">Play</button>
+        <div class="analysis-layout">
+            <div class="analysis-main">
+                <div class="game-status-panel">
+                    <p>Am Zug: <strong id="activeColor">Weiß</strong></p>
+                    <p>Status: <strong id="gameStatus">Bereit</strong></p>
+                    <div class="history-actions">
+                        <button id="historyStartBtn" type="button">Anfang</button>
+                        <button id="undoBtn" type="button">Zug zurück</button>
+                        <button id="redoBtn" type="button">Zug vor</button>
+                        <button id="historyEndBtn" type="button">Aktuell</button>
+                        <button id="historyPlayBtn" type="button">Play</button>
+                    </div>
+                    <p id="historyStatus" class="history-status">Live-Ansicht.</p>
+                    <p class="history-help">Shortcuts: ← zurück, → vor, Home Anfang, Ende aktuell.</p>
+                </div>
+                <div id="drawPanel" class="draw-panel hidden">
+                    <p id="drawHint" class="draw-hint">Remis kann beansprucht werden.</p>
+                    <div class="draw-actions">
+                        <button id="claimThreefoldBtn" type="button">Dreifach beanspruchen</button>
+                        <button id="claimFiftyMoveBtn" type="button">50-Züge-Regel beanspruchen</button>
+                    </div>
+                </div>
+                <div id="fullBoard" class="chessboard">
+                    <!-- Dynamically injected via app.js -->
+                </div>
+                <div id="promotionPanel" class="promotion-panel hidden">
+                    <p id="promotionHint" class="promotion-hint">Bauernumwandlung wählen.</p>
+                    <div class="promotion-actions">
+                        <button class="promotion-btn" type="button" data-promotion-piece="Q">Dame</button>
+                        <button class="promotion-btn" type="button" data-promotion-piece="R">Turm</button>
+                        <button class="promotion-btn" type="button" data-promotion-piece="B">Läufer</button>
+                        <button class="promotion-btn" type="button" data-promotion-piece="N">Springer</button>
+                        <button id="cancelPromotionBtn" type="button" class="promotion-cancel-btn">Abbrechen</button>
+                    </div>
+                </div>
             </div>
-            <p id="historyStatus" class="history-status">Live-Ansicht.</p>
-            <p class="history-help">Shortcuts: ← zurück, → vor, Home Anfang, Ende aktuell.</p>
-        </div>
-        <div id="drawPanel" class="draw-panel hidden">
-            <p id="drawHint" class="draw-hint">Remis kann beansprucht werden.</p>
-            <div class="draw-actions">
-                <button id="claimThreefoldBtn" type="button">Dreifach beanspruchen</button>
-                <button id="claimFiftyMoveBtn" type="button">50-Züge-Regel beanspruchen</button>
+            <div class="analysis-side">
+                <div class="moves-panel">
+                    <h2>Zuglog</h2>
+                    <div id="moveLog" class="move-log">
+                        <p class="move-log-empty">Noch keine Züge ausgeführt.</p>
+                    </div>
+                </div>
             </div>
-        </div>
-        <div id="fullBoard" class="chessboard">
-            <!-- Dynamically injected via app.js -->
-        </div>
-        <div id="promotionPanel" class="promotion-panel hidden">
-            <p id="promotionHint" class="promotion-hint">Bauernumwandlung wählen.</p>
-            <div class="promotion-actions">
-                <button class="promotion-btn" type="button" data-promotion-piece="Q">Dame</button>
-                <button class="promotion-btn" type="button" data-promotion-piece="R">Turm</button>
-                <button class="promotion-btn" type="button" data-promotion-piece="B">Läufer</button>
-                <button class="promotion-btn" type="button" data-promotion-piece="N">Springer</button>
-                <button id="cancelPromotionBtn" type="button" class="promotion-cancel-btn">Abbrechen</button>
-            </div>
-        </div>
-        <div class="moves-panel">
-            <h2>Zuglog</h2>
-            <ol id="moveLog" class="move-log">
-                <li class="move-log-empty">Noch keine Züge ausgeführt.</li>
-            </ol>
         </div>
         <div class="notation-panel">
             <h2>Notation</h2>

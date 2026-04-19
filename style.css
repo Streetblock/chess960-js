@@ -26,6 +26,18 @@ body {
     max-width: 600px;
 }
 
+.analysis-layout {
+    display: grid;
+    gap: 20px;
+    align-items: start;
+}
+
+.analysis-main,
+.analysis-side {
+    display: grid;
+    gap: 16px;
+}
+
 h1 {
     margin-bottom: 20px;
     color: #2c3e50;
@@ -144,6 +156,11 @@ button:active { transform: scale(0.98); }
     width: 100%;
     max-width: 480px;
     text-align: left;
+}
+
+.moves-panel {
+    padding: 15px 15px 12px;
+    margin-bottom: 0;
 }
 
 .draw-panel {
@@ -322,34 +339,90 @@ hr {
 }
 
 .move-log {
-    padding-left: 22px;
-    max-height: 220px;
+    display: grid;
+    gap: 8px;
+    max-height: 280px;
     overflow-y: auto;
 }
 
-.move-log-item,
 .move-log-empty {
-    margin: 6px 0;
     font-size: 15px;
     color: #2c3e50;
 }
 
+.move-log-empty {
+    margin: 0;
+}
+
+.move-log-row {
+    display: grid;
+    grid-template-columns: 44px minmax(0, 1fr) minmax(0, 1fr);
+    gap: 8px;
+    align-items: stretch;
+}
+
+.move-log-number {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font: 700 13px/1 "Consolas", "Courier New", monospace;
+    color: #6b7c93;
+    background: #eef2f6;
+    border-radius: 8px;
+}
+
+.move-log-cell {
+    min-width: 0;
+}
+
 .move-log-item {
-    list-style: decimal;
-    cursor: pointer;
+    width: 100%;
+    min-width: 0;
+    justify-content: flex-start;
     border-radius: 6px;
-    padding: 4px 6px;
-    transition: background-color 0.15s ease, color 0.15s ease;
+    padding: 10px 12px;
+    font-size: 14px;
+    font-weight: 600;
+    background: #ffffff;
+    color: #2c3e50;
+    border: 1px solid #d8e0e8;
+    transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
 }
 
 .move-log-item:hover {
     background-color: #e8eef7;
+    border-color: #b7c6d8;
 }
 
 .move-log-item.active {
     background-color: #d7e7fb;
     color: #1f4f82;
     font-weight: 700;
+    border-color: #7aa5d6;
+}
+
+.move-log-item.empty {
+    background: transparent;
+    border: 1px dashed #d8e0e8;
+    color: #9aa5b1;
+    cursor: default;
+}
+
+.move-log-item.empty:hover {
+    background: transparent;
+    border-color: #d8e0e8;
+}
+
+@media (max-width: 560px) {
+    .move-log-row {
+        grid-template-columns: 38px minmax(0, 1fr) minmax(0, 1fr);
+        gap: 6px;
+    }
+
+    .move-log-item {
+        padding: 10px;
+        font-size: 13px;
+    }
 }
 
 .notation-label {
@@ -391,4 +464,38 @@ hr {
     margin-top: 12px;
     font-size: 14px;
     color: #34495e;
+}
+
+@media (min-width: 920px) {
+    .container {
+        max-width: 1080px;
+        padding: 28px 24px;
+    }
+
+    .analysis-layout {
+        grid-template-columns: minmax(0, 520px) minmax(280px, 1fr);
+        gap: 24px;
+    }
+
+    .game-status-panel,
+    .draw-panel,
+    .promotion-panel,
+    .chessboard,
+    .moves-panel,
+    .notation-panel,
+    .board,
+    .status-panel {
+        max-width: none;
+    }
+
+    .moves-panel {
+        position: sticky;
+        top: 20px;
+        max-height: calc(100vh - 60px);
+        overflow: hidden;
+    }
+
+    .move-log {
+        max-height: calc(100vh - 190px);
+    }
 }
