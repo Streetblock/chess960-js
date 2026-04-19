@@ -1361,6 +1361,12 @@ export default class Chess960 {
         return this.hydrateGameState(gameState).stateHistory.length;
     }
 
+    forkFromHistoryIndex(gameState, historyIndex) {
+        const normalizedState = this.goToHistoryIndex(gameState, historyIndex);
+        const trimmedHistory = normalizedState.stateHistory.slice(0, historyIndex + 1);
+        return this.#attachHistory(normalizedState, trimmedHistory, historyIndex);
+    }
+
     #restoreHistoryState(gameState, historyIndex) {
         const snapshot = gameState.stateHistory[historyIndex];
 

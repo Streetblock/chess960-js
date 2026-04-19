@@ -56,6 +56,7 @@ const undoBtn = document.getElementById("undoBtn");
 const redoBtn = document.getElementById("redoBtn");
 const historyEndBtn = document.getElementById("historyEndBtn");
 const historyPlayBtn = document.getElementById("historyPlayBtn");
+const historyForkBtn = document.getElementById("historyForkBtn");
 const historyStatus = document.getElementById("historyStatus");
 const promotionPanel = document.getElementById("promotionPanel");
 const promotionHint = document.getElementById("promotionHint");
@@ -299,6 +300,7 @@ function renderHistoryActions(state) {
         redoBtn.disabled = true;
         historyEndBtn.disabled = true;
         historyPlayBtn.disabled = true;
+        historyForkBtn.disabled = true;
         historyPlayBtn.textContent = "Play";
         return;
     }
@@ -312,6 +314,7 @@ function renderHistoryActions(state) {
     redoBtn.disabled = !canRedo;
     historyEndBtn.disabled = !hasHistory || state.historyIndex === chess960.getHistoryLength(state) - 1;
     historyPlayBtn.disabled = !hasHistory;
+    historyForkBtn.disabled = !hasHistory || state.historyIndex === chess960.getHistoryLength(state) - 1;
     historyPlayBtn.textContent = isReplayRunning() ? "Pause" : "Play";
 }
 
@@ -647,6 +650,31 @@ function jumpToLatest() {
     jumpToHistory(chess960.getHistoryLength(gameState) - 1);
 }
 
+function forkVariationFromCurrentPosition() {
+    if (!gameState) {
+        return;
+    }
+
+    const latestIndex = chess960.getHistoryLength(gameState) - 1;
+
+    if (gameState.historyIndex >= latestIndex) {
+        setNotationStatus("Du bist bereits auf der aktuellen Hauptlinie.", true);
+        return;
+    }
+
+    try {
+        stopReplay();
+        pendingPromotion = null;
+        gameState = chess960.forkFromHistoryIndex(gameState, gameState.historyIndex);
+        renderGame();
+        persistGameState();
+        setNotationStatus(`Neue Variante ab Halbzug ${gameState.historyIndex} gestartet.`);
+    } catch (error) {
+        console.error("Variation fork failed", error);
+        setNotationStatus(`Variante konnte nicht erstellt werden: ${error.message}`, true);
+    }
+}
+
 function stepReplayForward() {
     if (!gameState) {
         stopReplay();
@@ -855,6 +883,7 @@ undoBtn.addEventListener("click", undoMove);
 redoBtn.addEventListener("click", redoMove);
 historyEndBtn.addEventListener("click", jumpToLatest);
 historyPlayBtn.addEventListener("click", toggleReplay);
+historyForkBtn.addEventListener("click", forkVariationFromCurrentPosition);
 promotionButtons.forEach((button) => {
     button.addEventListener("click", () => confirmPromotion(button.dataset.promotionPiece));
 });

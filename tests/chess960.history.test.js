@@ -118,5 +118,27 @@ export default [
             assert.throws(() => engine.goToHistoryIndex(game, 2), /History index out of range/);
             assert.throws(() => engine.goToHistoryIndex(game, 0.5), /History index must be an integer/);
         }
+    },
+    {
+        name: "forks a new variation from an earlier history index",
+        run() {
+            const engine = new Chess960();
+            let game = engine.createGame(518);
+
+            game = engine.movePiece(game, "e2", "e4");
+            game = engine.movePiece(game, "e7", "e5");
+            game = engine.movePiece(game, "g1", "f3");
+
+            const forked = engine.forkFromHistoryIndex(game, 1);
+            const continued = engine.movePiece(forked, "c7", "c5");
+
+            assert.equal(forked.historyIndex, 1);
+            assert.equal(engine.getHistoryLength(forked), 2);
+            assert.equal(forked.canRedo, false);
+            assert.equal(engine.exportFEN(forked), "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b HAha e3 0 1");
+
+            assert.equal(engine.exportFEN(continued), "rnbqkbnr/pp1ppppp/8/2p5/4P3/8/PPPP1PPP/RNBQKBNR w HAha c6 0 2");
+            assert.equal(continued.canRedo, false);
+        }
     }
 ];

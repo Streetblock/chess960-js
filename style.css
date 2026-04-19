@@ -257,6 +257,14 @@ button:active { transform: scale(0.98); }
     background-color: #566573;
 }
 
+#historyForkBtn {
+    background-color: #7d5fff;
+}
+
+#historyForkBtn:hover {
+    background-color: #6846f2;
+}
+
 .history-actions button:hover {
     background-color: #45525d;
 }
