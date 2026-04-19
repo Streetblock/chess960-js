@@ -41,5 +41,34 @@ export default [
             assert.equal(engine.getPieceAt(afterCastle, "f1")?.type, "R");
             assert.equal(afterCastle.moveHistory.at(-1)?.san, "O-O");
         }
+    },
+    {
+        name: "allows Chess960 queen side castling when rook already starts on target square",
+        run() {
+            const engine = new Chess960();
+            const game = engine.importFEN("4k3/8/8/8/8/8/8/3RK1R1 w DG - 0 1", {
+                backRank: ["B", "Q", "N", "R", "K", "N", "R", "B"]
+            });
+
+            assert.ok(engine.getLegalMoves(game, "e1").includes("c1"));
+
+            const afterCastle = engine.movePiece(game, "e1", "c1");
+
+            assert.equal(engine.getPieceAt(afterCastle, "c1")?.type, "K");
+            assert.equal(engine.getPieceAt(afterCastle, "d1")?.type, "R");
+            assert.equal(afterCastle.moveHistory.at(-1)?.san, "O-O-O");
+        }
+    },
+    {
+        name: "prevents castling through an attacked transit square",
+        run() {
+            const engine = new Chess960();
+            const game = engine.importFEN("4kr2/8/8/8/8/8/8/R3K2R w HAha - 0 1", {
+                backRank: ["R", "N", "B", "Q", "K", "B", "N", "R"]
+            });
+
+            assert.equal(engine.getLegalMoves(game, "e1").includes("g1"), false);
+            assert.equal(engine.getLegalMoves(game, "e1").includes("c1"), true);
+        }
     }
 ];

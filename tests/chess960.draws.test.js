@@ -70,6 +70,29 @@ export default [
         }
     },
     {
+        name: "restores claimable draw state across undo and redo",
+        run() {
+            const engine = new Chess960();
+            let game = engine.createGame(518);
+
+            for (let index = 0; index < 2; index += 1) {
+                game = engine.movePiece(game, "g1", "f3");
+                game = engine.movePiece(game, "g8", "f6");
+                game = engine.movePiece(game, "f3", "g1");
+                game = engine.movePiece(game, "f6", "g8");
+            }
+
+            const claimed = engine.claimDraw(game, "threefoldRepetition");
+            const undone = engine.undo(claimed);
+            const redone = engine.redo(undone);
+
+            assert.equal(undone.status, "active");
+            assert.ok(undone.claimableDraws.includes("threefoldRepetition"));
+            assert.equal(redone.status, "draw");
+            assert.equal(redone.drawReason, "threefoldRepetition");
+        }
+    },
+    {
         name: "marks seventy five move rule as automatic draw",
         run() {
             const engine = new Chess960();

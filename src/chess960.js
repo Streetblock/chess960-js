@@ -56,6 +56,7 @@ const CASTLE_SIDE_NAMES = Object.freeze({
     queenSide: "O-O-O"
 });
 const PROMOTION_PIECES = Object.freeze(["Q", "R", "B", "N"]);
+const CLAIMABLE_DRAW_REASONS = Object.freeze(["threefoldRepetition", "fiftyMoveRule"]);
 const DEFAULT_FEN_OPTIONS = Object.freeze({
     castlingFormat: "shredder"
 });
@@ -1403,6 +1404,9 @@ export default class Chess960 {
             castlingConfig: cloneCastlingConfig(gameState.castlingConfig),
             castlingRights: cloneCastlingRights(gameState.castlingRights)
         };
+        const persistedDrawReason = nextState.drawReason;
+        const shouldPreserveClaimedDraw = nextState.status === "draw"
+            && CLAIMABLE_DRAW_REASONS.includes(persistedDrawReason);
 
         if (nextState.selectedSquare) {
             const selectedPiece = this.getPieceAt(nextState, nextState.selectedSquare);
@@ -1438,7 +1442,12 @@ export default class Chess960 {
         nextState.drawReason = null;
         nextState.claimableDraws = claimableDraws;
 
-        if (!hasMove && kingInCheck) {
+        if (shouldPreserveClaimedDraw && claimableDraws.includes(persistedDrawReason)) {
+            nextState.status = "draw";
+            nextState.winner = null;
+            nextState.drawReason = persistedDrawReason;
+            nextState.claimableDraws = [];
+        } else if (!hasMove && kingInCheck) {
             nextState.status = "checkmate";
             nextState.winner = otherColor(sideToMove);
         } else if (!hasMove) {
