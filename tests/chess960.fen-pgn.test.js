@@ -95,5 +95,21 @@ export default [
             assert.equal(engine.getPieceAt(imported.gameState, "a8")?.type, "N");
             assert.equal(engine.exportFEN(imported.gameState), engine.exportFEN(promoted));
         }
+    },
+    {
+        name: "imports PGN with comments nags and side variations",
+        run() {
+            const engine = new Chess960();
+            const pgn = `[Event "Annotated Game"]\n[Site "Berlin"]\n[Date "2026.04.19"]\n[Round "1"]\n[White "Alice"]\n[Black "Bob"]\n[Result "*"]\n\n1. e4 $1 {Best by test.} (1. d4 d5) e5 2. Nf3 Nc6 *`;
+            const imported = engine.importPGN(pgn);
+
+            assert.deepEqual(
+                imported.gameState.moveHistory.map((move) => move.san),
+                ["e4", "e5", "Nf3", "Nc6"]
+            );
+            assert.equal(imported.headers.Event, "Annotated Game");
+            assert.equal(imported.headers.Site, "Berlin");
+            assert.equal(imported.headers.Result, "*");
+        }
     }
 ];

@@ -64,5 +64,19 @@ export default [
             assert.equal(afterMove.moveHistory.at(-1)?.san, "a8=N");
             assert.equal(engine.getPieceAt(afterMove, "a8")?.type, "N");
         }
+    },
+    {
+        name: "builds SAN for capture promotion with check",
+        run() {
+            const engine = new Chess960();
+            const game = engine.importFEN("kr6/P7/8/8/8/8/8/K7 w - - 0 1", {
+                backRank: ["R", "N", "B", "Q", "K", "B", "N", "R"]
+            });
+            const afterMove = engine.movePiece(game, "a7", "b8", "Q");
+
+            assert.equal(afterMove.moveHistory.at(-1)?.san, "axb8=Q+");
+            assert.equal(engine.getPieceAt(afterMove, "b8")?.type, "Q");
+            assert.equal(afterMove.status, "check");
+        }
     }
 ];
