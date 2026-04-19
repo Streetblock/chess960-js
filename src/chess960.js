@@ -55,6 +55,7 @@ const CASTLE_SIDE_NAMES = Object.freeze({
     kingSide: "O-O",
     queenSide: "O-O-O"
 });
+const PROMOTION_PIECES = Object.freeze(["Q", "R", "B", "N"]);
 const DEFAULT_FEN_OPTIONS = Object.freeze({
     castlingFormat: "shredder"
 });
@@ -1269,6 +1270,22 @@ export default class Chess960 {
         return this.#pushHistory(this.#annotateLastMove(previousState, move, syncedState));
     }
 
+    isPromotionMove(gameState, fromSquare, toSquare) {
+        const normalizedState = this.hydrateGameState(gameState);
+        const movingPiece = this.getPieceAt(normalizedState, fromSquare);
+
+        if (!movingPiece || movingPiece.type !== "P") {
+            return false;
+        }
+
+        if (!this.getLegalMoves(normalizedState, fromSquare).includes(toSquare)) {
+            return false;
+        }
+
+        const { row } = parseSquare(toSquare);
+        return row === 0 || row === BOARD_SIZE - 1;
+    }
+
     claimDraw(gameState, reason) {
         const normalizedState = this.hydrateGameState(gameState);
 
@@ -1845,6 +1862,7 @@ export default class Chess960 {
         }
 
         const castlingSide = this.#getCastlingSide(gameState, movingPiece, toSquare);
+        const normalizedPromotion = this.#normalizePromotionPiece(promotion);
         const moveContext = {
             color: movingPiece.color,
             piece: movingPiece.type,
@@ -1896,8 +1914,8 @@ export default class Chess960 {
         };
 
         if (movingPiece.type === "P" && (to.row === 0 || to.row === BOARD_SIZE - 1)) {
-            nextPiece.type = promotion;
-            moveContext.promotion = promotion;
+            nextPiece.type = normalizedPromotion;
+            moveContext.promotion = normalizedPromotion;
         }
 
         gameState.board[to.row][to.col] = nextPiece;
@@ -2065,6 +2083,20 @@ export default class Chess960 {
         }
 
         return backRank.map((piece) => typeof piece === "string" ? piece.trim().toUpperCase() : piece);
+    }
+
+    #normalizePromotionPiece(promotion) {
+        if (typeof promotion !== "string") {
+            throw new Error("Promotion piece must be a string.");
+        }
+
+        const normalizedPromotion = promotion.trim().toUpperCase();
+
+        if (!PROMOTION_PIECES.includes(normalizedPromotion)) {
+            throw new Error(`Promotion piece must be one of: ${PROMOTION_PIECES.join(", ")}.`);
+        }
+
+        return normalizedPromotion;
     }
 
     #placeAtEmptySlot(row, targetEmptySlot, piece) {

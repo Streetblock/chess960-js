@@ -79,6 +79,16 @@
         <div id="fullBoard" class="chessboard">
             <!-- Dynamically injected via app.js -->
         </div>
+        <div id="promotionPanel" class="promotion-panel hidden">
+            <p id="promotionHint" class="promotion-hint">Bauernumwandlung wählen.</p>
+            <div class="promotion-actions">
+                <button class="promotion-btn" type="button" data-promotion-piece="Q">Dame</button>
+                <button class="promotion-btn" type="button" data-promotion-piece="R">Turm</button>
+                <button class="promotion-btn" type="button" data-promotion-piece="B">Läufer</button>
+                <button class="promotion-btn" type="button" data-promotion-piece="N">Springer</button>
+                <button id="cancelPromotionBtn" type="button" class="promotion-cancel-btn">Abbrechen</button>
+            </div>
+        </div>
         <div class="moves-panel">
             <h2>Zuglog</h2>
             <ol id="moveLog" class="move-log">

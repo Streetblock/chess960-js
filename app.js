@@ -19,6 +19,12 @@ const BLACK_SYMBOLS = {
     K: "\u265A",
     P: "\u265F"
 };
+const PROMOTION_LABELS = {
+    Q: "Dame",
+    R: "Turm",
+    B: "Laeufer",
+    N: "Springer"
+};
 const COLOR_LABELS = {
     white: "Wei\u00df",
     black: "Schwarz"
@@ -47,6 +53,10 @@ const activeColorDisplay = document.getElementById("activeColor");
 const gameStatusDisplay = document.getElementById("gameStatus");
 const undoBtn = document.getElementById("undoBtn");
 const redoBtn = document.getElementById("redoBtn");
+const promotionPanel = document.getElementById("promotionPanel");
+const promotionHint = document.getElementById("promotionHint");
+const promotionButtons = Array.from(document.querySelectorAll(".promotion-btn"));
+const cancelPromotionBtn = document.getElementById("cancelPromotionBtn");
 const moveLog = document.getElementById("moveLog");
 const drawPanel = document.getElementById("drawPanel");
 const drawHint = document.getElementById("drawHint");
@@ -61,6 +71,7 @@ const importPgnBtn = document.getElementById("importPgnBtn");
 const notationStatus = document.getElementById("notationStatus");
 
 let gameState = null;
+let pendingPromotion = null;
 
 function initializeDropdowns() {
     squares.forEach((square) => {
@@ -106,6 +117,7 @@ function handleBackRankChange() {
 
 function initializeGameFromBackRank(backRank, currentId = null) {
     const positionId = currentId ?? chess960.getIdFromPosition(backRank);
+    pendingPromotion = null;
     gameState = chess960.createGame(backRank);
     renderValidBackRank(backRank, positionId);
     renderGame();
@@ -128,6 +140,7 @@ function renderInvalidBackRank(backRank) {
     activeColorDisplay.textContent = "-";
     gameStatusDisplay.textContent = "Warte auf gueltige Startaufstellung";
     renderHistoryActions(null);
+    renderPromotionPanel();
     moveLog.innerHTML = '<li class="move-log-empty">Noch keine Partie gestartet.</li>';
     persistUiState({
         currentId: null,
@@ -159,6 +172,7 @@ function renderGame() {
     renderBoard(gameState);
     renderGameStatus(gameState);
     renderHistoryActions(gameState);
+    renderPromotionPanel();
     renderDrawPanel(gameState);
     renderMoveLog(gameState.moveHistory);
     syncNotationFields(gameState);
@@ -264,6 +278,17 @@ function renderHistoryActions(state) {
     redoBtn.disabled = !canRedo;
 }
 
+function renderPromotionPanel() {
+    if (!pendingPromotion) {
+        promotionPanel.classList.add("hidden");
+        return;
+    }
+
+    const colorLabel = COLOR_LABELS[pendingPromotion.color];
+    promotionHint.textContent = `${colorLabel} wandelt auf ${pendingPromotion.to} um. Bitte Figur waehlen.`;
+    promotionPanel.classList.remove("hidden");
+}
+
 function renderMoveLog(moves) {
     moveLog.innerHTML = "";
 
@@ -285,13 +310,57 @@ function handleBoardClick(square) {
         return;
     }
 
+    if (pendingPromotion) {
+        pendingPromotion = null;
+    }
+
     try {
+        const selectedSquare = gameState.selectedSquare;
+
+        if (selectedSquare && gameState.legalTargets.includes(square) && chess960.isPromotionMove(gameState, selectedSquare, square)) {
+            const piece = chess960.getPieceAt(gameState, selectedSquare);
+            pendingPromotion = {
+                from: selectedSquare,
+                to: square,
+                color: piece?.color ?? gameState.activeColor
+            };
+            renderGame();
+            return;
+        }
+
         gameState = chess960.performInteraction(gameState, square);
         renderGame();
         persistGameState();
     } catch (error) {
         console.error("Board interaction failed", error);
     }
+}
+
+function confirmPromotion(pieceType) {
+    if (!gameState || !pendingPromotion) {
+        return;
+    }
+
+    try {
+        gameState = chess960.movePiece(gameState, pendingPromotion.from, pendingPromotion.to, pieceType);
+        pendingPromotion = null;
+        renderGame();
+        persistGameState();
+        setNotationStatus(`Bauer erfolgreich zu ${PROMOTION_LABELS[pieceType]} umgewandelt.`);
+    } catch (error) {
+        console.error("Promotion failed", error);
+        setNotationStatus(`Umwandlung fehlgeschlagen: ${error.message}`, true);
+    }
+}
+
+function cancelPromotion() {
+    if (!pendingPromotion) {
+        return;
+    }
+
+    pendingPromotion = null;
+    renderGame();
+    setNotationStatus("Bauernumwandlung abgebrochen.");
 }
 
 function restartCurrentGame() {
@@ -323,6 +392,7 @@ function setNotationStatus(message, isError = false) {
 }
 
 function applyImportedGameState(importedState) {
+    pendingPromotion = null;
     gameState = chess960.hydrateGameState(importedState);
     applyBackRankToInputs(gameState.backRank);
     renderValidBackRank(gameState.backRank, gameState.positionId);
@@ -397,6 +467,7 @@ function undoMove() {
     }
 
     try {
+        pendingPromotion = null;
         gameState = chess960.undo(gameState);
         renderGame();
         persistGameState();
@@ -413,6 +484,7 @@ function redoMove() {
     }
 
     try {
+        pendingPromotion = null;
         gameState = chess960.redo(gameState);
         renderGame();
         persistGameState();
@@ -526,6 +598,7 @@ diceBtn.addEventListener("click", () => {
 });
 
 resetBtn.addEventListener("click", () => {
+    pendingPromotion = null;
     localStorage.removeItem(UI_STORAGE_KEY);
     localStorage.removeItem(GAME_STORAGE_KEY);
     loadPositionById(chess960.classicPositionId);
@@ -535,6 +608,10 @@ restartGameBtn.addEventListener("click", restartCurrentGame);
 copyBtn.addEventListener("click", copyToClipboard);
 undoBtn.addEventListener("click", undoMove);
 redoBtn.addEventListener("click", redoMove);
+promotionButtons.forEach((button) => {
+    button.addEventListener("click", () => confirmPromotion(button.dataset.promotionPiece));
+});
+cancelPromotionBtn.addEventListener("click", cancelPromotion);
 refreshFenBtn.addEventListener("click", () => {
     if (!gameState) {
         setNotationStatus("Es gibt aktuell keine Partie zum Exportieren.", true);

@@ -47,5 +47,18 @@ export default [
             assert.equal(game.winner, "black");
             assert.equal(game.isCheck, true);
         }
+    },
+    {
+        name: "detects promotion moves and rejects unsupported promotion pieces",
+        run() {
+            const engine = new Chess960();
+            const game = engine.importFEN("4k3/P7/8/8/8/8/8/4K3 w - - 0 1", {
+                backRank: ["R", "N", "B", "Q", "K", "B", "N", "R"]
+            });
+
+            assert.equal(engine.isPromotionMove(game, "a7", "a8"), true);
+            assert.equal(engine.isPromotionMove(game, "a7", "a6"), false);
+            assert.throws(() => engine.movePiece(game, "a7", "a8", "K"), /Promotion piece must be one of/);
+        }
     }
 ];
