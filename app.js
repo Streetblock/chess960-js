@@ -45,6 +45,13 @@ const restartGameBtn = document.getElementById("restartGameBtn");
 const activeColorDisplay = document.getElementById("activeColor");
 const gameStatusDisplay = document.getElementById("gameStatus");
 const moveLog = document.getElementById("moveLog");
+const fenInput = document.getElementById("fenInput");
+const pgnInput = document.getElementById("pgnInput");
+const refreshFenBtn = document.getElementById("refreshFenBtn");
+const importFenBtn = document.getElementById("importFenBtn");
+const refreshPgnBtn = document.getElementById("refreshPgnBtn");
+const importPgnBtn = document.getElementById("importPgnBtn");
+const notationStatus = document.getElementById("notationStatus");
 
 let gameState = null;
 
@@ -121,6 +128,7 @@ function renderInvalidBackRank(backRank) {
     });
     localStorage.removeItem(GAME_STORAGE_KEY);
     gameState = null;
+    clearNotationFields();
 }
 
 function renderValidBackRank(backRank, currentId) {
@@ -135,12 +143,14 @@ function renderValidBackRank(backRank, currentId) {
 
 function renderGame() {
     if (!gameState) {
+        clearNotationFields();
         return;
     }
 
     renderBoard(gameState);
     renderGameStatus(gameState);
     renderMoveLog(gameState.moveHistory);
+    syncNotationFields(gameState);
 }
 
 function renderBoard(state) {
@@ -238,6 +248,76 @@ function restartCurrentGame() {
     }
 
     initializeGameFromBackRank(backRank);
+}
+
+function syncNotationFields(state) {
+    fenInput.value = chess960.exportFEN(state);
+    pgnInput.value = chess960.exportPGN(state);
+    setNotationStatus("Notation aktualisiert.");
+}
+
+function clearNotationFields() {
+    fenInput.value = "";
+    pgnInput.value = "";
+    setNotationStatus("Warte auf gueltige Partie.", true);
+}
+
+function setNotationStatus(message, isError = false) {
+    notationStatus.textContent = message;
+    notationStatus.className = isError ? "notation-status error" : "notation-status";
+}
+
+function applyImportedGameState(importedState) {
+    gameState = chess960.hydrateGameState(importedState);
+    applyBackRankToInputs(gameState.backRank);
+    renderValidBackRank(gameState.backRank, gameState.positionId);
+    renderGame();
+    persistUiState({
+        currentId: gameState.positionId,
+        backRank: gameState.backRank,
+        isValid: true
+    });
+    persistGameState();
+}
+
+function importFen() {
+    const fen = fenInput.value.trim();
+
+    if (!fen) {
+        setNotationStatus("Bitte zuerst eine FEN eingeben.", true);
+        return;
+    }
+
+    try {
+        const importedState = chess960.importFEN(fen, {
+            backRank: gameState?.backRank ?? getCurrentBackRank()
+        });
+        applyImportedGameState(importedState);
+        setNotationStatus("FEN erfolgreich importiert.");
+    } catch (error) {
+        console.error("FEN import failed", error);
+        setNotationStatus(`FEN-Import fehlgeschlagen: ${error.message}`, true);
+    }
+}
+
+function importPgn() {
+    const pgn = pgnInput.value.trim();
+
+    if (!pgn) {
+        setNotationStatus("Bitte zuerst eine PGN eingeben.", true);
+        return;
+    }
+
+    try {
+        const imported = chess960.importPGN(pgn, {
+            backRank: gameState?.backRank
+        });
+        applyImportedGameState(imported.gameState);
+        setNotationStatus("PGN erfolgreich importiert.");
+    } catch (error) {
+        console.error("PGN import failed", error);
+        setNotationStatus(`PGN-Import fehlgeschlagen: ${error.message}`, true);
+    }
 }
 
 function getSymbolForPiece(piece) {
@@ -350,6 +430,26 @@ resetBtn.addEventListener("click", () => {
 
 restartGameBtn.addEventListener("click", restartCurrentGame);
 copyBtn.addEventListener("click", copyToClipboard);
+refreshFenBtn.addEventListener("click", () => {
+    if (!gameState) {
+        setNotationStatus("Es gibt aktuell keine Partie zum Exportieren.", true);
+        return;
+    }
+
+    fenInput.value = chess960.exportFEN(gameState);
+    setNotationStatus("FEN aktualisiert.");
+});
+importFenBtn.addEventListener("click", importFen);
+refreshPgnBtn.addEventListener("click", () => {
+    if (!gameState) {
+        setNotationStatus("Es gibt aktuell keine Partie zum Exportieren.", true);
+        return;
+    }
+
+    pgnInput.value = chess960.exportPGN(gameState);
+    setNotationStatus("PGN aktualisiert.");
+});
+importPgnBtn.addEventListener("click", importPgn);
 
 initializeDropdowns();
 restoreInitialState();

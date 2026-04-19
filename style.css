@@ -134,7 +134,8 @@ button:active { transform: scale(0.98); }
 .hidden { display: none; }
 
 .game-status-panel,
-.moves-panel {
+.moves-panel,
+.notation-panel {
     background: #f8f9fa;
     border: 1px solid #ddd;
     border-radius: 8px;
@@ -215,4 +216,45 @@ hr {
     margin: 6px 0;
     font-size: 15px;
     color: #2c3e50;
+}
+
+.notation-label {
+    display: block;
+    margin: 12px 0 6px;
+    font-size: 14px;
+    font-weight: 700;
+    color: #34495e;
+}
+
+.notation-textarea {
+    width: 100%;
+    resize: vertical;
+    border: 1px solid #cfd8dc;
+    border-radius: 8px;
+    padding: 10px 12px;
+    font: 14px/1.5 "Consolas", "Courier New", monospace;
+    color: #1f2933;
+    background: #ffffff;
+}
+
+.notation-textarea-large {
+    min-height: 180px;
+}
+
+.notation-actions {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-top: 10px;
+}
+
+.notation-actions button {
+    min-width: 0;
+    flex: 1 1 180px;
+}
+
+.notation-status {
+    margin-top: 12px;
+    font-size: 14px;
+    color: #34495e;
 }

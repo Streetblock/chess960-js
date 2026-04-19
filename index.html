@@ -74,7 +74,23 @@
                 <li class="move-log-empty">Noch keine ZÃ¼ge ausgefÃ¼hrt.</li>
             </ol>
         </div>
-        
+        <div class="notation-panel">
+            <h2>Notation</h2>
+            <label class="notation-label" for="fenInput">FEN</label>
+            <textarea id="fenInput" class="notation-textarea" rows="3" spellcheck="false"></textarea>
+            <div class="notation-actions">
+                <button id="refreshFenBtn" type="button">FEN aktualisieren</button>
+                <button id="importFenBtn" type="button">FEN importieren</button>
+            </div>
+            <label class="notation-label" for="pgnInput">PGN</label>
+            <textarea id="pgnInput" class="notation-textarea notation-textarea-large" rows="8" spellcheck="false"></textarea>
+            <div class="notation-actions">
+                <button id="refreshPgnBtn" type="button">PGN aktualisieren</button>
+                <button id="importPgnBtn" type="button">PGN importieren</button>
+            </div>
+            <p id="notationStatus" class="notation-status">Notation bereit.</p>
+        </div>
+
     </div>
 
     <!-- IMPORTANT: type="module" is strictly required to import ES6 modules! -->
