@@ -326,15 +326,19 @@ function renderHistoryStatus(state) {
 
     const currentPly = state.historyIndex;
     const totalPlies = Math.max(0, chess960.getHistoryLength(state) - 1);
+    const variationInfo = chess960.getVariationInfo(state);
+    const lineLabel = variationInfo.isMainLine
+        ? "Hauptlinie"
+        : `Nebenlinie ab Halbzug ${variationInfo.branchPointIndex}`;
 
     if (currentPly === totalPlies) {
         historyStatus.textContent = totalPlies === 0
-            ? "Live-Ansicht. Noch keine Züge gespielt."
-            : `Live-Ansicht auf Halbzug ${currentPly}/${totalPlies}.`;
+            ? `Live-Ansicht auf ${lineLabel}. Noch keine Züge gespielt.`
+            : `Live-Ansicht auf ${lineLabel}, Halbzug ${currentPly}/${totalPlies}.`;
         return;
     }
 
-    historyStatus.textContent = `Replay-Modus auf Halbzug ${currentPly}/${totalPlies}. Brett ist schreibgeschützt.`;
+    historyStatus.textContent = `Replay-Modus auf ${lineLabel}, Halbzug ${currentPly}/${totalPlies}. Brett ist schreibgeschützt.`;
 }
 
 function renderPromotionPanel() {

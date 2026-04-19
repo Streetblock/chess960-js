@@ -140,5 +140,46 @@ export default [
             assert.equal(engine.exportFEN(continued), "rnbqkbnr/pp1ppppp/8/2p5/4P3/8/PPPP1PPP/RNBQKBNR w HAha c6 0 2");
             assert.equal(continued.canRedo, false);
         }
+    },
+    {
+        name: "persists variation graph through serialization",
+        run() {
+            const engine = new Chess960();
+            let game = engine.createGame(518);
+
+            game = engine.movePiece(game, "e2", "e4");
+            game = engine.movePiece(game, "e7", "e5");
+            game = engine.movePiece(game, "g1", "f3");
+
+            const forked = engine.forkFromHistoryIndex(game, 1);
+            const variation = engine.movePiece(forked, "c7", "c5");
+            const restored = engine.hydrateGameState(engine.serializeGameState(variation));
+
+            assert.equal(engine.getHistoryLength(restored), 3);
+            assert.equal(restored.currentNodeId !== null, true);
+            assert.equal(restored.variationGraph.nodes.n1.children.length, 2);
+            assert.equal(engine.exportFEN(restored), engine.exportFEN(variation));
+        }
+    },
+    {
+        name: "reports variation metadata for side branches",
+        run() {
+            const engine = new Chess960();
+            let game = engine.createGame(518);
+
+            game = engine.movePiece(game, "e2", "e4");
+            game = engine.movePiece(game, "e7", "e5");
+            game = engine.movePiece(game, "g1", "f3");
+
+            const forked = engine.forkFromHistoryIndex(game, 1);
+            const variation = engine.movePiece(forked, "c7", "c5");
+            const variationInfo = engine.getVariationInfo(variation);
+            const mainLineInfo = engine.getVariationInfo(game);
+
+            assert.equal(variationInfo.isMainLine, false);
+            assert.equal(variationInfo.branchPointIndex, 2);
+            assert.equal(mainLineInfo.isMainLine, true);
+            assert.equal(mainLineInfo.branchPointIndex, -1);
+        }
     }
 ];

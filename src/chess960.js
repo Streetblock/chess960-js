@@ -177,6 +177,30 @@ function cloneCastlingConfig(castlingConfig) {
     };
 }
 
+function cloneVariationGraph(variationGraph) {
+    if (!variationGraph || typeof variationGraph !== "object") {
+        return null;
+    }
+
+    return {
+        rootId: variationGraph.rootId,
+        nextNodeId: variationGraph.nextNodeId,
+        nodes: Object.fromEntries(
+            Object.entries(variationGraph.nodes ?? {}).map(([nodeId, node]) => ([
+                nodeId,
+                {
+                    id: node.id,
+                    parentId: node.parentId ?? null,
+                    children: Array.isArray(node.children) ? [...node.children] : [],
+                    preferredChildId: node.preferredChildId ?? null,
+                    move: node.move ? { ...node.move } : null,
+                    snapshot: node.snapshot ? JSON.parse(JSON.stringify(node.snapshot)) : null
+                }
+            ]))
+        )
+    };
+}
+
 function otherColor(color) {
     return color === "white" ? "black" : "white";
 }
@@ -410,6 +434,9 @@ export default class Chess960 {
             setupFEN: null,
             stateHistory: [],
             historyIndex: 0,
+            lineNodeIds: [],
+            currentNodeId: null,
+            variationGraph: null,
             canUndo: false,
             canRedo: false,
             castlingConfig,
@@ -427,20 +454,26 @@ export default class Chess960 {
             throw new Error("Cannot hydrate invalid game state.");
         }
 
+        const hasVariationGraph = rawState.variationGraph && typeof rawState.variationGraph === "object";
         const hasHistory = Array.isArray(rawState.stateHistory) && rawState.stateHistory.length > 0;
 
-        if (!hasHistory) {
+        if (!hasHistory && !hasVariationGraph) {
             return this.#seedHistory(this.#syncDerivedState(this.#cloneGameState(rawState)));
         }
 
-        const stateHistory = rawState.stateHistory.map((snapshot) => (
-            this.#createHistorySnapshot(this.#syncDerivedState(this.#cloneGameState(snapshot)))
-        ));
-        const rawHistoryIndex = Number.isInteger(rawState.historyIndex) ? rawState.historyIndex : stateHistory.length - 1;
-        const historyIndex = Math.max(0, Math.min(rawHistoryIndex, stateHistory.length - 1));
-        const currentState = this.#syncDerivedState(this.#cloneGameState(rawState));
+        if (!hasVariationGraph) {
+            const stateHistory = rawState.stateHistory.map((snapshot) => (
+                this.#createHistorySnapshot(this.#syncDerivedState(this.#cloneGameState(snapshot)))
+            ));
+            const rawHistoryIndex = Number.isInteger(rawState.historyIndex) ? rawState.historyIndex : stateHistory.length - 1;
+            const historyIndex = Math.max(0, Math.min(rawHistoryIndex, stateHistory.length - 1));
+            const currentState = this.#syncDerivedState(this.#cloneGameState(rawState));
 
-        return this.#attachHistory(currentState, stateHistory, historyIndex);
+            return this.#attachHistory(currentState, stateHistory, historyIndex);
+        }
+
+        const currentState = this.#syncDerivedState(this.#cloneGameState(rawState));
+        return this.#syncVariationState(currentState);
     }
 
     serializeGameState(gameState) {
@@ -519,6 +552,9 @@ export default class Chess960 {
             setupFEN: fen.trim(),
             stateHistory: [],
             historyIndex: 0,
+            lineNodeIds: [],
+            currentNodeId: null,
+            variationGraph: null,
             canUndo: false,
             canRedo: false,
             castlingConfig,
@@ -649,6 +685,9 @@ export default class Chess960 {
             setupFEN: typeof rawState.setupFEN === "string" ? rawState.setupFEN : null,
             stateHistory: Array.isArray(rawState.stateHistory) ? rawState.stateHistory.map((snapshot) => this.#cloneHistorySnapshot(snapshot)) : [],
             historyIndex: Number.isInteger(rawState.historyIndex) ? rawState.historyIndex : 0,
+            lineNodeIds: Array.isArray(rawState.lineNodeIds) ? [...rawState.lineNodeIds] : [],
+            currentNodeId: rawState.currentNodeId ?? null,
+            variationGraph: rawState.variationGraph ? cloneVariationGraph(rawState.variationGraph) : null,
             canUndo: Boolean(rawState.canUndo),
             canRedo: Boolean(rawState.canRedo),
             castlingConfig: rawState.castlingConfig ? cloneCastlingConfig(rawState.castlingConfig) : defaultCastlingConfig,
@@ -1344,7 +1383,7 @@ export default class Chess960 {
     }
 
     goToHistoryIndex(gameState, historyIndex) {
-        const normalizedState = this.hydrateGameState(gameState);
+        const normalizedState = this.#syncVariationState(this.hydrateGameState(gameState));
 
         if (!Number.isInteger(historyIndex)) {
             throw new Error("History index must be an integer.");
@@ -1358,13 +1397,40 @@ export default class Chess960 {
     }
 
     getHistoryLength(gameState) {
-        return this.hydrateGameState(gameState).stateHistory.length;
+        return this.#syncVariationState(this.hydrateGameState(gameState)).stateHistory.length;
     }
 
     forkFromHistoryIndex(gameState, historyIndex) {
         const normalizedState = this.goToHistoryIndex(gameState, historyIndex);
-        const trimmedHistory = normalizedState.stateHistory.slice(0, historyIndex + 1);
-        return this.#attachHistory(normalizedState, trimmedHistory, historyIndex);
+        const trimmedLineNodeIds = normalizedState.lineNodeIds.slice(0, historyIndex + 1);
+        return this.#attachVariationState(normalizedState, normalizedState.variationGraph, trimmedLineNodeIds, historyIndex);
+    }
+
+    getVariationInfo(gameState) {
+        const normalizedState = this.#syncVariationState(this.hydrateGameState(gameState));
+        const currentNode = normalizedState.variationGraph?.nodes?.[normalizedState.currentNodeId] ?? null;
+        return {
+            currentNodeId: normalizedState.currentNodeId,
+            lineNodeIds: [...normalizedState.lineNodeIds],
+            historyIndex: normalizedState.historyIndex,
+            isMainLine: normalizedState.lineNodeIds.every((nodeId, index) => {
+                if (index === 0) {
+                    return true;
+                }
+
+                const parentNode = normalizedState.variationGraph.nodes[normalizedState.lineNodeIds[index - 1]];
+                return parentNode?.preferredChildId === nodeId;
+            }),
+            branchPointIndex: normalizedState.lineNodeIds.findIndex((nodeId, index) => {
+                if (index === 0) {
+                    return false;
+                }
+
+                const parentNode = normalizedState.variationGraph.nodes[normalizedState.lineNodeIds[index - 1]];
+                return parentNode?.preferredChildId !== nodeId;
+            }),
+            childVariationCount: currentNode?.children?.length ?? 0
+        };
     }
 
     #restoreHistoryState(gameState, historyIndex) {
@@ -1375,32 +1441,122 @@ export default class Chess960 {
         }
 
         const restoredState = this.#syncDerivedState(this.#cloneGameState(snapshot));
-        return this.#attachHistory(restoredState, gameState.stateHistory, historyIndex);
+        return this.#attachVariationState(restoredState, gameState.variationGraph, gameState.lineNodeIds, historyIndex);
+    }
+
+    #syncVariationState(gameState) {
+        if (!gameState.variationGraph || !Array.isArray(gameState.lineNodeIds) || gameState.lineNodeIds.length === 0) {
+            return gameState;
+        }
+
+        const normalizedLineNodeIds = gameState.lineNodeIds.filter((nodeId) => gameState.variationGraph.nodes?.[nodeId]);
+        const fallbackLineNodeIds = normalizedLineNodeIds.length > 0
+            ? normalizedLineNodeIds
+            : [gameState.variationGraph.rootId];
+
+        return this.#attachVariationState(gameState, gameState.variationGraph, fallbackLineNodeIds, gameState.historyIndex);
     }
 
     #seedHistory(gameState) {
-        return this.#attachHistory(gameState, [this.#createHistorySnapshot(gameState)], 0);
+        const snapshot = this.#createHistorySnapshot(gameState);
+        const rootNodeId = "n0";
+        const variationGraph = {
+            rootId: rootNodeId,
+            nextNodeId: 1,
+            nodes: {
+                [rootNodeId]: {
+                    id: rootNodeId,
+                    parentId: null,
+                    children: [],
+                    preferredChildId: null,
+                    move: null,
+                    snapshot
+                }
+            }
+        };
+
+        return this.#attachVariationState(gameState, variationGraph, [rootNodeId], 0);
     }
 
     #pushHistory(gameState) {
-        const history = Array.isArray(gameState.stateHistory) ? gameState.stateHistory.map((snapshot) => this.#cloneHistorySnapshot(snapshot)) : [];
-        const historyIndex = Number.isInteger(gameState.historyIndex) ? gameState.historyIndex : history.length - 1;
-        const nextHistory = history.slice(0, historyIndex + 1);
+        const variationGraph = cloneVariationGraph(gameState.variationGraph);
+        const lineNodeIds = Array.isArray(gameState.lineNodeIds) ? [...gameState.lineNodeIds] : [];
+        const historyIndex = Number.isInteger(gameState.historyIndex) ? gameState.historyIndex : lineNodeIds.length - 1;
+        const currentNodeId = lineNodeIds[historyIndex];
+        const currentNode = variationGraph?.nodes?.[currentNodeId];
 
-        nextHistory.push(this.#createHistorySnapshot(gameState));
-        return this.#attachHistory(gameState, nextHistory, nextHistory.length - 1);
+        if (!variationGraph || !currentNodeId || !currentNode) {
+            return this.#seedHistory(gameState);
+        }
+
+        const newNodeId = `n${variationGraph.nextNodeId}`;
+        variationGraph.nextNodeId += 1;
+
+        variationGraph.nodes[newNodeId] = {
+            id: newNodeId,
+            parentId: currentNodeId,
+            children: [],
+            preferredChildId: null,
+            move: gameState.moveHistory.at(-1) ? { ...gameState.moveHistory.at(-1) } : null,
+            snapshot: this.#createHistorySnapshot(gameState)
+        };
+
+        currentNode.children = [...currentNode.children, newNodeId];
+        if (!currentNode.preferredChildId) {
+            currentNode.preferredChildId = newNodeId;
+        }
+
+        const nextLineNodeIds = [...lineNodeIds.slice(0, historyIndex + 1), newNodeId];
+        return this.#attachVariationState(gameState, variationGraph, nextLineNodeIds, nextLineNodeIds.length - 1);
     }
 
     #attachHistory(gameState, stateHistory, historyIndex) {
-        const clonedHistory = stateHistory.map((snapshot) => this.#cloneHistorySnapshot(snapshot));
-        const normalizedIndex = Math.max(0, Math.min(historyIndex, clonedHistory.length - 1));
+        const normalizedState = this.#cloneGameState(gameState);
+        const rootNodeId = "n0";
+        const variationGraph = {
+            rootId: rootNodeId,
+            nextNodeId: stateHistory.length,
+            nodes: {}
+        };
+
+        stateHistory.forEach((snapshot, index) => {
+            const nodeId = `n${index}`;
+            const parentId = index === 0 ? null : `n${index - 1}`;
+            const nextNodeId = index < stateHistory.length - 1 ? `n${index + 1}` : null;
+            variationGraph.nodes[nodeId] = {
+                id: nodeId,
+                parentId,
+                children: nextNodeId ? [nextNodeId] : [],
+                preferredChildId: nextNodeId,
+                move: index === 0 ? null : (normalizedState.moveHistory[index - 1] ? { ...normalizedState.moveHistory[index - 1] } : null),
+                snapshot: this.#cloneHistorySnapshot(snapshot)
+            };
+        });
+
+        const lineNodeIds = stateHistory.map((_, index) => `n${index}`);
+        return this.#attachVariationState(normalizedState, variationGraph, lineNodeIds, historyIndex);
+    }
+
+    #attachVariationState(gameState, variationGraph, lineNodeIds, historyIndex) {
+        const clonedState = this.#cloneGameState(gameState);
+        const clonedVariationGraph = cloneVariationGraph(variationGraph);
+        const normalizedLineNodeIds = Array.isArray(lineNodeIds) ? [...lineNodeIds] : [];
+        const normalizedIndex = Math.max(0, Math.min(historyIndex, normalizedLineNodeIds.length - 1));
+        const stateHistory = normalizedLineNodeIds.map((nodeId) => (
+            clonedVariationGraph.nodes[nodeId]?.snapshot
+                ? this.#cloneHistorySnapshot(clonedVariationGraph.nodes[nodeId].snapshot)
+                : this.#createHistorySnapshot(clonedState)
+        ));
 
         return {
-            ...this.#cloneGameState(gameState),
-            stateHistory: clonedHistory,
+            ...clonedState,
+            variationGraph: clonedVariationGraph,
+            lineNodeIds: normalizedLineNodeIds,
+            currentNodeId: normalizedLineNodeIds[normalizedIndex] ?? clonedVariationGraph.rootId,
+            stateHistory,
             historyIndex: normalizedIndex,
             canUndo: normalizedIndex > 0,
-            canRedo: normalizedIndex < clonedHistory.length - 1
+            canRedo: normalizedIndex < stateHistory.length - 1
         };
     }
 
@@ -1413,6 +1569,9 @@ export default class Chess960 {
 
         delete clonedState.stateHistory;
         delete clonedState.historyIndex;
+        delete clonedState.lineNodeIds;
+        delete clonedState.currentNodeId;
+        delete clonedState.variationGraph;
         delete clonedState.canUndo;
         delete clonedState.canRedo;
 
@@ -1432,6 +1591,9 @@ export default class Chess960 {
             setupFEN: typeof gameState.setupFEN === "string" ? gameState.setupFEN : null,
             stateHistory: Array.isArray(gameState.stateHistory) ? gameState.stateHistory.map((snapshot) => this.#cloneHistorySnapshot(snapshot)) : [],
             historyIndex: Number.isInteger(gameState.historyIndex) ? gameState.historyIndex : 0,
+            lineNodeIds: Array.isArray(gameState.lineNodeIds) ? [...gameState.lineNodeIds] : [],
+            currentNodeId: gameState.currentNodeId ?? null,
+            variationGraph: gameState.variationGraph ? cloneVariationGraph(gameState.variationGraph) : null,
             castlingConfig: cloneCastlingConfig(gameState.castlingConfig),
             castlingRights: cloneCastlingRights(gameState.castlingRights)
         };
@@ -1513,6 +1675,9 @@ export default class Chess960 {
             setupFEN: typeof gameState.setupFEN === "string" ? gameState.setupFEN : null,
             stateHistory: Array.isArray(gameState.stateHistory) ? gameState.stateHistory.map((snapshot) => this.#cloneHistorySnapshot(snapshot)) : [],
             historyIndex: Number.isInteger(gameState.historyIndex) ? gameState.historyIndex : 0,
+            lineNodeIds: Array.isArray(gameState.lineNodeIds) ? [...gameState.lineNodeIds] : [],
+            currentNodeId: gameState.currentNodeId ?? null,
+            variationGraph: gameState.variationGraph ? cloneVariationGraph(gameState.variationGraph) : null,
             castlingConfig: cloneCastlingConfig(gameState.castlingConfig),
             castlingRights: cloneCastlingRights(gameState.castlingRights),
             canUndo: Number.isInteger(gameState.historyIndex) ? gameState.historyIndex > 0 : false,
