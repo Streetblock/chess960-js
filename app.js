@@ -46,6 +46,10 @@ const restartGameBtn = document.getElementById("restartGameBtn");
 const activeColorDisplay = document.getElementById("activeColor");
 const gameStatusDisplay = document.getElementById("gameStatus");
 const moveLog = document.getElementById("moveLog");
+const drawPanel = document.getElementById("drawPanel");
+const drawHint = document.getElementById("drawHint");
+const claimThreefoldBtn = document.getElementById("claimThreefoldBtn");
+const claimFiftyMoveBtn = document.getElementById("claimFiftyMoveBtn");
 const fenInput = document.getElementById("fenInput");
 const pgnInput = document.getElementById("pgnInput");
 const refreshFenBtn = document.getElementById("refreshFenBtn");
@@ -129,6 +133,7 @@ function renderInvalidBackRank(backRank) {
     });
     localStorage.removeItem(GAME_STORAGE_KEY);
     gameState = null;
+    drawPanel.classList.add("hidden");
     clearNotationFields();
 }
 
@@ -150,6 +155,7 @@ function renderGame() {
 
     renderBoard(gameState);
     renderGameStatus(gameState);
+    renderDrawPanel(gameState);
     renderMoveLog(gameState.moveHistory);
     syncNotationFields(gameState);
 }
@@ -218,6 +224,32 @@ function renderGameStatus(state) {
     }
 
     gameStatusDisplay.textContent = STATUS_LABELS[state.status] ?? STATUS_LABELS.active;
+}
+
+function renderDrawPanel(state) {
+    const claimable = state.claimableDraws ?? [];
+
+    if (claimable.length === 0) {
+        drawPanel.classList.add("hidden");
+        claimThreefoldBtn.disabled = true;
+        claimFiftyMoveBtn.disabled = true;
+        return;
+    }
+
+    const hintParts = [];
+
+    if (claimable.includes("threefoldRepetition")) {
+        hintParts.push("dreifache Stellungswiederholung");
+    }
+
+    if (claimable.includes("fiftyMoveRule")) {
+        hintParts.push("50-Züge-Regel");
+    }
+
+    drawPanel.classList.remove("hidden");
+    drawHint.textContent = `Remis kann beansprucht werden: ${hintParts.join(" und ")}.`;
+    claimThreefoldBtn.disabled = !claimable.includes("threefoldRepetition");
+    claimFiftyMoveBtn.disabled = !claimable.includes("fiftyMoveRule");
 }
 
 function renderMoveLog(moves) {
@@ -328,6 +360,22 @@ function importPgn() {
     } catch (error) {
         console.error("PGN import failed", error);
         setNotationStatus(`PGN-Import fehlgeschlagen: ${error.message}`, true);
+    }
+}
+
+function claimDraw(reason) {
+    if (!gameState) {
+        return;
+    }
+
+    try {
+        gameState = chess960.claimDraw(gameState, reason);
+        renderGame();
+        persistGameState();
+        setNotationStatus("Remis erfolgreich eingetragen.");
+    } catch (error) {
+        console.error("Draw claim failed", error);
+        setNotationStatus(`Remis konnte nicht beansprucht werden: ${error.message}`, true);
     }
 }
 
@@ -461,6 +509,8 @@ refreshPgnBtn.addEventListener("click", () => {
     setNotationStatus("PGN aktualisiert.");
 });
 importPgnBtn.addEventListener("click", importPgn);
+claimThreefoldBtn.addEventListener("click", () => claimDraw("threefoldRepetition"));
+claimFiftyMoveBtn.addEventListener("click", () => claimDraw("fiftyMoveRule"));
 
 initializeDropdowns();
 restoreInitialState();

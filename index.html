@@ -65,6 +65,13 @@
             <p>Am Zug: <strong id="activeColor">Weiß</strong></p>
             <p>Status: <strong id="gameStatus">Bereit</strong></p>
         </div>
+        <div id="drawPanel" class="draw-panel hidden">
+            <p id="drawHint" class="draw-hint">Remis kann beansprucht werden.</p>
+            <div class="draw-actions">
+                <button id="claimThreefoldBtn" type="button">Dreifach beanspruchen</button>
+                <button id="claimFiftyMoveBtn" type="button">50-Züge-Regel beanspruchen</button>
+            </div>
+        </div>
         <div id="fullBoard" class="chessboard">
             <!-- Dynamically injected via app.js -->
         </div>

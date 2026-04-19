@@ -146,6 +146,40 @@ button:active { transform: scale(0.98); }
     text-align: left;
 }
 
+.draw-panel {
+    background: #fff7e6;
+    border: 1px solid #f5c26b;
+    border-radius: 8px;
+    padding: 15px;
+    margin: 0 auto 20px;
+    width: 100%;
+    max-width: 480px;
+    text-align: left;
+}
+
+.draw-hint {
+    margin: 0 0 10px;
+    font-size: 14px;
+    color: #8a5a00;
+    font-weight: 600;
+}
+
+.draw-actions {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.draw-actions button {
+    min-width: 0;
+    flex: 1 1 180px;
+    background-color: #c97a12;
+}
+
+.draw-actions button:hover {
+    background-color: #aa650f;
+}
+
 .game-status-panel p {
     margin: 6px 0;
     font-size: clamp(14px, 4vw, 16px);

@@ -1245,6 +1245,24 @@ export default class Chess960 {
         return this.#annotateLastMove(previousState, move, syncedState);
     }
 
+    claimDraw(gameState, reason) {
+        const normalizedState = this.hydrateGameState(gameState);
+
+        if (!normalizedState.claimableDraws.includes(reason)) {
+            throw new Error(`Draw reason is not currently claimable: ${reason}`);
+        }
+
+        const nextState = this.#cloneGameState(normalizedState);
+        nextState.status = "draw";
+        nextState.winner = null;
+        nextState.drawReason = reason;
+        nextState.claimableDraws = [];
+        nextState.selectedSquare = null;
+        nextState.legalTargets = [];
+
+        return this.#syncClaimedDrawState(nextState);
+    }
+
     resetGame(positionInput = this.classicPositionId) {
         return this.createGame(positionInput);
     }
@@ -1316,6 +1334,22 @@ export default class Chess960 {
         }
 
         return nextState;
+    }
+
+    #syncClaimedDrawState(gameState) {
+        return {
+            ...gameState,
+            backRank: cloneBackRank(gameState.backRank),
+            board: cloneBoard(gameState.board),
+            moveHistory: gameState.moveHistory.map((move) => ({ ...move })),
+            legalTargets: [],
+            selectedSquare: null,
+            positionHistory: Array.isArray(gameState.positionHistory) ? [...gameState.positionHistory] : [],
+            drawReason: gameState.drawReason ?? null,
+            claimableDraws: [],
+            castlingConfig: cloneCastlingConfig(gameState.castlingConfig),
+            castlingRights: cloneCastlingRights(gameState.castlingRights)
+        };
     }
 
     #hasAnyLegalMove(gameState, color) {
