@@ -529,6 +529,70 @@ export default class Chess960 {
         return `${headerSection}\n\n${moveSection}`.trim();
     }
 
+    applySAN(gameState, sanMove) {
+        if (typeof sanMove !== "string" || !sanMove.trim()) {
+            throw new Error("SAN move must be a non-empty string.");
+        }
+
+        const previousState = this.hydrateGameState(gameState);
+        const targetSan = this.#normalizeSanToken(sanMove);
+        const legalMoves = this.#enumerateLegalMoves(previousState);
+
+        for (const candidate of legalMoves) {
+            const nextState = this.movePiece(previousState, candidate.from, candidate.to, candidate.promotion);
+            const lastMove = nextState.moveHistory.at(-1);
+
+            if (lastMove && this.#normalizeSanToken(lastMove.san ?? lastMove.notation) === targetSan) {
+                return nextState;
+            }
+        }
+
+        throw new Error(`Could not resolve SAN move: ${sanMove}`);
+    }
+
+    importPGN(pgn, options = {}) {
+        if (typeof pgn !== "string") {
+            throw new Error("PGN must be a string.");
+        }
+
+        const { headers, movetext } = this.#parsePgnDocument(pgn);
+        let gameState;
+
+        if (headers.FEN) {
+            const fenOptions = {
+                ...options
+            };
+
+            if (headers.SetUp === "1" && !fenOptions.backRank && !Number.isInteger(fenOptions.positionId) && !Array.isArray(fenOptions.positionInput)) {
+                fenOptions.backRank = this.#deriveBackRankFromFenHeader(headers.FEN);
+            }
+
+            gameState = this.importFEN(headers.FEN, fenOptions);
+        } else if (Number.isInteger(options.positionId) || Array.isArray(options.backRank) || Array.isArray(options.positionInput)) {
+            const positionInput = Number.isInteger(options.positionId)
+                ? options.positionId
+                : (options.backRank ?? options.positionInput);
+            gameState = this.createGame(positionInput);
+        } else {
+            gameState = this.createGame(this.classicPositionId);
+        }
+
+        const tokens = this.#tokenizePgnMoves(movetext);
+
+        for (const token of tokens) {
+            if (this.#isPgnResultToken(token)) {
+                continue;
+            }
+
+            gameState = this.applySAN(gameState, token);
+        }
+
+        return {
+            headers,
+            gameState
+        };
+    }
+
     #cloneGameState(rawState) {
         const defaultCastlingConfig = createCastlingConfig(rawState.backRank);
 
@@ -890,6 +954,121 @@ export default class Chess960 {
 
         tokens.push(result);
         return tokens.join(" ");
+    }
+
+    #parsePgnDocument(pgn) {
+        const lines = pgn.replace(/\r\n/g, "\n").split("\n");
+        const headers = {};
+        const moveLines = [];
+        let inHeaders = true;
+
+        lines.forEach((line) => {
+            const trimmed = line.trim();
+
+            if (inHeaders && trimmed.startsWith("[") && trimmed.endsWith("]")) {
+                const match = trimmed.match(/^\[(\w+)\s+"(.*)"\]$/);
+                if (match) {
+                    headers[match[1]] = match[2];
+                }
+                return;
+            }
+
+            if (trimmed === "" && inHeaders) {
+                return;
+            }
+
+            inHeaders = false;
+            if (trimmed !== "") {
+                moveLines.push(trimmed);
+            }
+        });
+
+        return {
+            headers,
+            movetext: moveLines.join(" ")
+        };
+    }
+
+    #tokenizePgnMoves(movetext) {
+        const withoutComments = movetext
+            .replace(/\{[^}]*\}/g, " ")
+            .replace(/;[^\n]*/g, " ")
+            .replace(/\([^()]*\)/g, " ");
+
+        return withoutComments
+            .split(/\s+/)
+            .map((token) => token.trim())
+            .filter(Boolean)
+            .filter((token) => !/^\d+\.(\.\.)?$/.test(token))
+            .filter((token) => !/^\$\d+$/.test(token));
+    }
+
+    #isPgnResultToken(token) {
+        return token === "1-0" || token === "0-1" || token === "1/2-1/2" || token === "*";
+    }
+
+    #normalizeSanToken(token) {
+        return token
+            .trim()
+            .replace(/[!?]+/g, "")
+            .replace(/\s+/g, "");
+    }
+
+    #enumerateLegalMoves(gameState) {
+        const moves = [];
+
+        for (let row = 0; row < BOARD_SIZE; row += 1) {
+            for (let col = 0; col < BOARD_SIZE; col += 1) {
+                const piece = gameState.board[row][col];
+
+                if (!piece || piece.color !== gameState.activeColor) {
+                    continue;
+                }
+
+                const legalTargets = this.getLegalMoves(gameState, piece.square);
+
+                legalTargets.forEach((targetSquare) => {
+                    const promotions = piece.type === "P" && (targetSquare.endsWith("8") || targetSquare.endsWith("1"))
+                        ? ["Q", "R", "B", "N"]
+                        : [undefined];
+
+                    promotions.forEach((promotion) => {
+                        moves.push({
+                            from: piece.square,
+                            to: targetSquare,
+                            promotion
+                        });
+                    });
+                });
+            }
+        }
+
+        return moves;
+    }
+
+    #deriveBackRankFromFenHeader(fen) {
+        const placement = fen.trim().split(/\s+/)[0];
+        const ranks = placement.split("/");
+        const whiteRank = ranks.at(-1);
+
+        if (!whiteRank) {
+            throw new Error("Could not derive Chess960 back rank from FEN header.");
+        }
+
+        const backRank = [];
+        for (const symbol of whiteRank) {
+            if (/^\d$/.test(symbol)) {
+                throw new Error("FEN header does not contain a full white back rank.");
+            }
+
+            backRank.push(fenSymbolToPieceType(symbol));
+        }
+
+        if (!this.isValidBackRank(backRank)) {
+            throw new Error("Derived back rank from FEN header is not a legal Chess960 setup.");
+        }
+
+        return backRank;
     }
 
     getPieceAt(gameState, square) {
