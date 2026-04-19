@@ -438,8 +438,7 @@ export default class Chess960 {
         ));
         const rawHistoryIndex = Number.isInteger(rawState.historyIndex) ? rawState.historyIndex : stateHistory.length - 1;
         const historyIndex = Math.max(0, Math.min(rawHistoryIndex, stateHistory.length - 1));
-        const currentSnapshot = stateHistory[historyIndex];
-        const currentState = this.#syncDerivedState(this.#cloneGameState(currentSnapshot));
+        const currentState = this.#syncDerivedState(this.#cloneGameState(rawState));
 
         return this.#attachHistory(currentState, stateHistory, historyIndex);
     }

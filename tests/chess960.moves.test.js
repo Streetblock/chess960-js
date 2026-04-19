@@ -62,6 +62,22 @@ export default [
         }
     },
     {
+        name: "keeps selected square interaction working with history state attached",
+        run() {
+            const engine = new Chess960();
+            let game = engine.createGame(518);
+
+            game = engine.selectSquare(game, "e2");
+            assert.deepEqual(game.legalTargets, ["e3", "e4"]);
+
+            game = engine.performInteraction(game, "e4");
+
+            assert.equal(game.moveHistory.length, 1);
+            assert.equal(game.moveHistory.at(-1)?.san, "e4");
+            assert.equal(engine.getPieceAt(game, "e4")?.type, "P");
+        }
+    },
+    {
         name: "detects stalemate after queen promotion and allows underpromotion to avoid it",
         run() {
             const engine = new Chess960();
