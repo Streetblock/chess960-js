@@ -5,14 +5,14 @@
     <!-- Mobil-Optimierung für Viewport und Touch -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Chess960 Generator & Validator</title>
-    
+
     <!-- Link to the external stylesheet -->
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
     <div class="container">
         <h1>Chess960 Generator</h1>
-        
+
         <!-- Action Buttons -->
         <div class="controls">
             <button id="diceBtn" title="Zufällige Position generieren">
@@ -27,7 +27,7 @@
                 Zufall (0-959)
             </button>
             <button id="resetBtn" title="Klassische Aufstellung">Standard (518)</button>
-            <button id="restartGameBtn" title="Laufende Partie mit aktueller Aufstellung neu starten">Partie zurÃ¼cksetzen</button>
+            <button id="restartGameBtn" title="Laufende Partie mit aktueller Aufstellung neu starten">Partie zurücksetzen</button>
 
             <button id="copyBtn" title="Aufstellung kopieren">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -62,7 +62,7 @@
         <!-- Full 8x8 Chessboard Render Target -->
         <h2>Komplettes Spielfeld</h2>
         <div class="game-status-panel">
-            <p>Am Zug: <strong id="activeColor">WeiÃŸ</strong></p>
+            <p>Am Zug: <strong id="activeColor">Weiß</strong></p>
             <p>Status: <strong id="gameStatus">Bereit</strong></p>
         </div>
         <div id="fullBoard" class="chessboard">
@@ -71,7 +71,7 @@
         <div class="moves-panel">
             <h2>Zuglog</h2>
             <ol id="moveLog" class="move-log">
-                <li class="move-log-empty">Noch keine ZÃ¼ge ausgefÃ¼hrt.</li>
+                <li class="move-log-empty">Noch keine Züge ausgeführt.</li>
             </ol>
         </div>
         <div class="notation-panel">
@@ -90,7 +90,6 @@
             </div>
             <p id="notationStatus" class="notation-status">Notation bereit.</p>
         </div>
-
     </div>
 
     <!-- IMPORTANT: type="module" is strictly required to import ES6 modules! -->
