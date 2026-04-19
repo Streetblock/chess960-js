@@ -407,6 +407,7 @@ export default class Chess960 {
             positionHistory: [],
             drawReason: null,
             claimableDraws: [],
+            setupFEN: null,
             stateHistory: [],
             historyIndex: 0,
             canUndo: false,
@@ -516,6 +517,7 @@ export default class Chess960 {
             positionHistory: [],
             drawReason: null,
             claimableDraws: [],
+            setupFEN: fen.trim(),
             stateHistory: [],
             historyIndex: 0,
             canUndo: false,
@@ -540,9 +542,8 @@ export default class Chess960 {
             Variant: "Chess960",
             ...options.headers
         };
-        const startingState = this.createGame(normalizedState.backRank);
-        const startingFen = this.exportFEN(startingState);
-        const includeSetup = options.includeSetup ?? normalizedState.positionId !== this.classicPositionId;
+        const startingFen = normalizedState.setupFEN ?? this.exportFEN(this.createGame(normalizedState.backRank));
+        const includeSetup = options.includeSetup ?? Boolean(normalizedState.setupFEN || normalizedState.positionId !== this.classicPositionId);
 
         if (includeSetup) {
             headers.SetUp = "1";
@@ -641,6 +642,7 @@ export default class Chess960 {
             positionHistory: Array.isArray(rawState.positionHistory) ? [...rawState.positionHistory] : [],
             drawReason: typeof rawState.drawReason === "string" ? rawState.drawReason : null,
             claimableDraws: Array.isArray(rawState.claimableDraws) ? [...rawState.claimableDraws] : [],
+            setupFEN: typeof rawState.setupFEN === "string" ? rawState.setupFEN : null,
             stateHistory: Array.isArray(rawState.stateHistory) ? rawState.stateHistory.map((snapshot) => this.#cloneHistorySnapshot(snapshot)) : [],
             historyIndex: Number.isInteger(rawState.historyIndex) ? rawState.historyIndex : 0,
             canUndo: Boolean(rawState.canUndo),
@@ -1399,6 +1401,7 @@ export default class Chess960 {
             positionHistory: Array.isArray(gameState.positionHistory) ? [...gameState.positionHistory] : [],
             drawReason: gameState.drawReason ?? null,
             claimableDraws: Array.isArray(gameState.claimableDraws) ? [...gameState.claimableDraws] : [],
+            setupFEN: typeof gameState.setupFEN === "string" ? gameState.setupFEN : null,
             stateHistory: Array.isArray(gameState.stateHistory) ? gameState.stateHistory.map((snapshot) => this.#cloneHistorySnapshot(snapshot)) : [],
             historyIndex: Number.isInteger(gameState.historyIndex) ? gameState.historyIndex : 0,
             castlingConfig: cloneCastlingConfig(gameState.castlingConfig),
@@ -1479,6 +1482,7 @@ export default class Chess960 {
             positionHistory: Array.isArray(gameState.positionHistory) ? [...gameState.positionHistory] : [],
             drawReason: gameState.drawReason ?? null,
             claimableDraws: [],
+            setupFEN: typeof gameState.setupFEN === "string" ? gameState.setupFEN : null,
             stateHistory: Array.isArray(gameState.stateHistory) ? gameState.stateHistory.map((snapshot) => this.#cloneHistorySnapshot(snapshot)) : [],
             historyIndex: Number.isInteger(gameState.historyIndex) ? gameState.historyIndex : 0,
             castlingConfig: cloneCastlingConfig(gameState.castlingConfig),

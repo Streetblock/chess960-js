@@ -70,5 +70,23 @@ export default [
             assert.equal(engine.getPieceAt(undone, "f6"), null);
             assert.equal(engine.getPieceAt(undone, "g8")?.type, "N");
         }
+    },
+    {
+        name: "starts a fresh undo redo chain from imported FEN states",
+        run() {
+            const engine = new Chess960();
+            let game = engine.importFEN("4k3/8/8/8/8/8/4P3/4K3 w - - 0 1", {
+                backRank: ["R", "N", "B", "Q", "K", "B", "N", "R"]
+            });
+
+            game = engine.movePiece(game, "e2", "e4");
+
+            const undone = engine.undo(game);
+            const redone = engine.redo(undone);
+
+            assert.equal(undone.historyIndex, 0);
+            assert.equal(engine.exportFEN(undone), "4k3/8/8/8/8/8/4P3/4K3 w - - 0 1");
+            assert.equal(engine.exportFEN(redone), engine.exportFEN(game));
+        }
     }
 ];

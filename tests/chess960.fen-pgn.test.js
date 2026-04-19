@@ -58,5 +58,42 @@ export default [
 
             assert.equal(engine.exportFEN(imported.gameState), engine.exportFEN(initial));
         }
+    },
+    {
+        name: "roundtrips Chess960 castling through PGN import export",
+        run() {
+            const engine = new Chess960();
+            let game = engine.createGame(3);
+
+            game = engine.movePiece(game, "f1", "g1");
+
+            const pgn = engine.exportPGN(game);
+            const imported = engine.importPGN(pgn, { positionId: 3 });
+
+            assert.deepEqual(
+                imported.gameState.moveHistory.map((move) => move.san),
+                ["O-O"]
+            );
+            assert.equal(engine.exportFEN(imported.gameState), engine.exportFEN(game));
+        }
+    },
+    {
+        name: "roundtrips promotion through PGN import export",
+        run() {
+            const engine = new Chess960();
+            const setup = engine.importFEN("1k6/P7/8/8/8/8/8/K7 w - - 0 1", {
+                backRank: ["R", "N", "B", "Q", "K", "B", "N", "R"]
+            });
+            const promoted = engine.movePiece(setup, "a7", "a8", "N");
+
+            const pgn = engine.exportPGN(promoted);
+            const imported = engine.importPGN(pgn, {
+                backRank: setup.backRank
+            });
+
+            assert.equal(imported.gameState.moveHistory.at(-1)?.san, "a8=N");
+            assert.equal(engine.getPieceAt(imported.gameState, "a8")?.type, "N");
+            assert.equal(engine.exportFEN(imported.gameState), engine.exportFEN(promoted));
+        }
     }
 ];
