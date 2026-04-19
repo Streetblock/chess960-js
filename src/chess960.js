@@ -405,6 +405,10 @@ export default class Chess960 {
             positionHistory: [],
             drawReason: null,
             claimableDraws: [],
+            stateHistory: [],
+            historyIndex: 0,
+            canUndo: false,
+            canRedo: false,
             castlingConfig,
             castlingRights: {
                 white: { kingSide: true, queenSide: true },
@@ -412,7 +416,7 @@ export default class Chess960 {
             }
         };
 
-        return this.#syncDerivedState(gameState);
+        return this.#seedHistory(this.#syncDerivedState(gameState));
     }
 
     hydrateGameState(rawState) {
@@ -420,9 +424,21 @@ export default class Chess960 {
             throw new Error("Cannot hydrate invalid game state.");
         }
 
-        const gameState = this.#cloneGameState(rawState);
+        const hasHistory = Array.isArray(rawState.stateHistory) && rawState.stateHistory.length > 0;
 
-        return this.#syncDerivedState(gameState);
+        if (!hasHistory) {
+            return this.#seedHistory(this.#syncDerivedState(this.#cloneGameState(rawState)));
+        }
+
+        const stateHistory = rawState.stateHistory.map((snapshot) => (
+            this.#createHistorySnapshot(this.#syncDerivedState(this.#cloneGameState(snapshot)))
+        ));
+        const rawHistoryIndex = Number.isInteger(rawState.historyIndex) ? rawState.historyIndex : stateHistory.length - 1;
+        const historyIndex = Math.max(0, Math.min(rawHistoryIndex, stateHistory.length - 1));
+        const currentSnapshot = stateHistory[historyIndex];
+        const currentState = this.#syncDerivedState(this.#cloneGameState(currentSnapshot));
+
+        return this.#attachHistory(currentState, stateHistory, historyIndex);
     }
 
     serializeGameState(gameState) {
@@ -498,11 +514,15 @@ export default class Chess960 {
             positionHistory: [],
             drawReason: null,
             claimableDraws: [],
+            stateHistory: [],
+            historyIndex: 0,
+            canUndo: false,
+            canRedo: false,
             castlingConfig,
             castlingRights
         };
 
-        return this.#syncDerivedState(gameState);
+        return this.#seedHistory(this.#syncDerivedState(gameState));
     }
 
     exportPGN(gameState, options = {}) {
@@ -619,6 +639,10 @@ export default class Chess960 {
             positionHistory: Array.isArray(rawState.positionHistory) ? [...rawState.positionHistory] : [],
             drawReason: typeof rawState.drawReason === "string" ? rawState.drawReason : null,
             claimableDraws: Array.isArray(rawState.claimableDraws) ? [...rawState.claimableDraws] : [],
+            stateHistory: Array.isArray(rawState.stateHistory) ? rawState.stateHistory.map((snapshot) => this.#cloneHistorySnapshot(snapshot)) : [],
+            historyIndex: Number.isInteger(rawState.historyIndex) ? rawState.historyIndex : 0,
+            canUndo: Boolean(rawState.canUndo),
+            canRedo: Boolean(rawState.canRedo),
             castlingConfig: rawState.castlingConfig ? cloneCastlingConfig(rawState.castlingConfig) : defaultCastlingConfig,
             castlingRights: rawState.castlingRights ? cloneCastlingRights(rawState.castlingRights) : {
                 white: { kingSide: true, queenSide: true },
@@ -1212,7 +1236,7 @@ export default class Chess960 {
     performInteraction(gameState, square) {
         const nextState = this.hydrateGameState(gameState);
 
-        if (nextState.status === "checkmate" || nextState.status === "stalemate") {
+        if (nextState.status === "checkmate" || nextState.status === "stalemate" || nextState.status === "draw") {
             return nextState;
         }
 
@@ -1242,7 +1266,7 @@ export default class Chess960 {
         nextState.moveHistory = [...nextState.moveHistory, this.#buildMoveRecord(previousState, move)];
 
         const syncedState = this.#syncDerivedState(nextState);
-        return this.#annotateLastMove(previousState, move, syncedState);
+        return this.#pushHistory(this.#annotateLastMove(previousState, move, syncedState));
     }
 
     claimDraw(gameState, reason) {
@@ -1260,11 +1284,91 @@ export default class Chess960 {
         nextState.selectedSquare = null;
         nextState.legalTargets = [];
 
-        return this.#syncClaimedDrawState(nextState);
+        return this.#pushHistory(this.#syncClaimedDrawState(nextState));
     }
 
     resetGame(positionInput = this.classicPositionId) {
         return this.createGame(positionInput);
+    }
+
+    undo(gameState) {
+        const normalizedState = this.hydrateGameState(gameState);
+
+        if (!normalizedState.canUndo) {
+            throw new Error("There is no earlier state to restore.");
+        }
+
+        return this.#restoreHistoryState(normalizedState, normalizedState.historyIndex - 1);
+    }
+
+    redo(gameState) {
+        const normalizedState = this.hydrateGameState(gameState);
+
+        if (!normalizedState.canRedo) {
+            throw new Error("There is no later state to restore.");
+        }
+
+        return this.#restoreHistoryState(normalizedState, normalizedState.historyIndex + 1);
+    }
+
+    canUndo(gameState) {
+        return this.hydrateGameState(gameState).canUndo;
+    }
+
+    canRedo(gameState) {
+        return this.hydrateGameState(gameState).canRedo;
+    }
+
+    #restoreHistoryState(gameState, historyIndex) {
+        const snapshot = gameState.stateHistory[historyIndex];
+
+        if (!snapshot) {
+            throw new Error(`History state does not exist at index ${historyIndex}.`);
+        }
+
+        const restoredState = this.#syncDerivedState(this.#cloneGameState(snapshot));
+        return this.#attachHistory(restoredState, gameState.stateHistory, historyIndex);
+    }
+
+    #seedHistory(gameState) {
+        return this.#attachHistory(gameState, [this.#createHistorySnapshot(gameState)], 0);
+    }
+
+    #pushHistory(gameState) {
+        const history = Array.isArray(gameState.stateHistory) ? gameState.stateHistory.map((snapshot) => this.#cloneHistorySnapshot(snapshot)) : [];
+        const historyIndex = Number.isInteger(gameState.historyIndex) ? gameState.historyIndex : history.length - 1;
+        const nextHistory = history.slice(0, historyIndex + 1);
+
+        nextHistory.push(this.#createHistorySnapshot(gameState));
+        return this.#attachHistory(gameState, nextHistory, nextHistory.length - 1);
+    }
+
+    #attachHistory(gameState, stateHistory, historyIndex) {
+        const clonedHistory = stateHistory.map((snapshot) => this.#cloneHistorySnapshot(snapshot));
+        const normalizedIndex = Math.max(0, Math.min(historyIndex, clonedHistory.length - 1));
+
+        return {
+            ...this.#cloneGameState(gameState),
+            stateHistory: clonedHistory,
+            historyIndex: normalizedIndex,
+            canUndo: normalizedIndex > 0,
+            canRedo: normalizedIndex < clonedHistory.length - 1
+        };
+    }
+
+    #createHistorySnapshot(gameState) {
+        return this.#cloneHistorySnapshot(gameState);
+    }
+
+    #cloneHistorySnapshot(gameState) {
+        const clonedState = this.#cloneGameState(gameState);
+
+        delete clonedState.stateHistory;
+        delete clonedState.historyIndex;
+        delete clonedState.canUndo;
+        delete clonedState.canRedo;
+
+        return JSON.parse(JSON.stringify(clonedState));
     }
 
     #syncDerivedState(gameState) {
@@ -1277,6 +1381,8 @@ export default class Chess960 {
             positionHistory: Array.isArray(gameState.positionHistory) ? [...gameState.positionHistory] : [],
             drawReason: gameState.drawReason ?? null,
             claimableDraws: Array.isArray(gameState.claimableDraws) ? [...gameState.claimableDraws] : [],
+            stateHistory: Array.isArray(gameState.stateHistory) ? gameState.stateHistory.map((snapshot) => this.#cloneHistorySnapshot(snapshot)) : [],
+            historyIndex: Number.isInteger(gameState.historyIndex) ? gameState.historyIndex : 0,
             castlingConfig: cloneCastlingConfig(gameState.castlingConfig),
             castlingRights: cloneCastlingRights(gameState.castlingRights)
         };
@@ -1347,8 +1453,12 @@ export default class Chess960 {
             positionHistory: Array.isArray(gameState.positionHistory) ? [...gameState.positionHistory] : [],
             drawReason: gameState.drawReason ?? null,
             claimableDraws: [],
+            stateHistory: Array.isArray(gameState.stateHistory) ? gameState.stateHistory.map((snapshot) => this.#cloneHistorySnapshot(snapshot)) : [],
+            historyIndex: Number.isInteger(gameState.historyIndex) ? gameState.historyIndex : 0,
             castlingConfig: cloneCastlingConfig(gameState.castlingConfig),
-            castlingRights: cloneCastlingRights(gameState.castlingRights)
+            castlingRights: cloneCastlingRights(gameState.castlingRights),
+            canUndo: Number.isInteger(gameState.historyIndex) ? gameState.historyIndex > 0 : false,
+            canRedo: false
         };
     }
 

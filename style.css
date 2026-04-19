@@ -185,6 +185,29 @@ button:active { transform: scale(0.98); }
     font-size: clamp(14px, 4vw, 16px);
 }
 
+.history-actions {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-top: 14px;
+}
+
+.history-actions button {
+    min-width: 0;
+    flex: 1 1 150px;
+    background-color: #566573;
+}
+
+.history-actions button:hover {
+    background-color: #45525d;
+}
+
+.history-actions button:disabled {
+    background-color: #b8c2cc;
+    cursor: not-allowed;
+    transform: none;
+}
+
 hr {
     border: 0;
     height: 1px;

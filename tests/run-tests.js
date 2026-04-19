@@ -4,6 +4,7 @@ import castlingTests from "./chess960.castling.test.js";
 import notationTests from "./chess960.notation.test.js";
 import fenPgnTests from "./chess960.fen-pgn.test.js";
 import drawTests from "./chess960.draws.test.js";
+import historyTests from "./chess960.history.test.js";
 
 const suites = [
     ...coreTests,
@@ -12,7 +13,8 @@ const suites = [
     ...notationTests,
     ...fenPgnTests
     ,
-    ...drawTests
+    ...drawTests,
+    ...historyTests
 ];
 
 let passed = 0;

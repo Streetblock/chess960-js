@@ -45,6 +45,8 @@ const resetBtn = document.getElementById("resetBtn");
 const restartGameBtn = document.getElementById("restartGameBtn");
 const activeColorDisplay = document.getElementById("activeColor");
 const gameStatusDisplay = document.getElementById("gameStatus");
+const undoBtn = document.getElementById("undoBtn");
+const redoBtn = document.getElementById("redoBtn");
 const moveLog = document.getElementById("moveLog");
 const drawPanel = document.getElementById("drawPanel");
 const drawHint = document.getElementById("drawHint");
@@ -125,6 +127,7 @@ function renderInvalidBackRank(backRank) {
     copyBtn.style.opacity = "0.5";
     activeColorDisplay.textContent = "-";
     gameStatusDisplay.textContent = "Warte auf gueltige Startaufstellung";
+    renderHistoryActions(null);
     moveLog.innerHTML = '<li class="move-log-empty">Noch keine Partie gestartet.</li>';
     persistUiState({
         currentId: null,
@@ -155,6 +158,7 @@ function renderGame() {
 
     renderBoard(gameState);
     renderGameStatus(gameState);
+    renderHistoryActions(gameState);
     renderDrawPanel(gameState);
     renderMoveLog(gameState.moveHistory);
     syncNotationFields(gameState);
@@ -250,6 +254,14 @@ function renderDrawPanel(state) {
     drawHint.textContent = `Remis kann beansprucht werden: ${hintParts.join(" und ")}.`;
     claimThreefoldBtn.disabled = !claimable.includes("threefoldRepetition");
     claimFiftyMoveBtn.disabled = !claimable.includes("fiftyMoveRule");
+}
+
+function renderHistoryActions(state) {
+    const canUndo = Boolean(state?.canUndo);
+    const canRedo = Boolean(state?.canRedo);
+
+    undoBtn.disabled = !canUndo;
+    redoBtn.disabled = !canRedo;
 }
 
 function renderMoveLog(moves) {
@@ -379,6 +391,38 @@ function claimDraw(reason) {
     }
 }
 
+function undoMove() {
+    if (!gameState) {
+        return;
+    }
+
+    try {
+        gameState = chess960.undo(gameState);
+        renderGame();
+        persistGameState();
+        setNotationStatus("Vorherigen Zustand wiederhergestellt.");
+    } catch (error) {
+        console.error("Undo failed", error);
+        setNotationStatus(`Undo fehlgeschlagen: ${error.message}`, true);
+    }
+}
+
+function redoMove() {
+    if (!gameState) {
+        return;
+    }
+
+    try {
+        gameState = chess960.redo(gameState);
+        renderGame();
+        persistGameState();
+        setNotationStatus("Naechsten Zustand wiederhergestellt.");
+    } catch (error) {
+        console.error("Redo failed", error);
+        setNotationStatus(`Redo fehlgeschlagen: ${error.message}`, true);
+    }
+}
+
 function getSymbolForPiece(piece) {
     return piece.color === "white" ? WHITE_SYMBOLS[piece.type] : BLACK_SYMBOLS[piece.type];
 }
@@ -489,6 +533,8 @@ resetBtn.addEventListener("click", () => {
 
 restartGameBtn.addEventListener("click", restartCurrentGame);
 copyBtn.addEventListener("click", copyToClipboard);
+undoBtn.addEventListener("click", undoMove);
+redoBtn.addEventListener("click", redoMove);
 refreshFenBtn.addEventListener("click", () => {
     if (!gameState) {
         setNotationStatus("Es gibt aktuell keine Partie zum Exportieren.", true);
