@@ -55,6 +55,7 @@ const historyStartBtn = document.getElementById("historyStartBtn");
 const undoBtn = document.getElementById("undoBtn");
 const redoBtn = document.getElementById("redoBtn");
 const historyEndBtn = document.getElementById("historyEndBtn");
+const historyPlayBtn = document.getElementById("historyPlayBtn");
 const historyStatus = document.getElementById("historyStatus");
 const promotionPanel = document.getElementById("promotionPanel");
 const promotionHint = document.getElementById("promotionHint");
@@ -75,6 +76,20 @@ const notationStatus = document.getElementById("notationStatus");
 
 let gameState = null;
 let pendingPromotion = null;
+let replayTimerId = null;
+
+function isReplayRunning() {
+    return replayTimerId !== null;
+}
+
+function stopReplay() {
+    if (replayTimerId === null) {
+        return;
+    }
+
+    window.clearInterval(replayTimerId);
+    replayTimerId = null;
+}
 
 function initializeDropdowns() {
     squares.forEach((square) => {
@@ -120,6 +135,7 @@ function handleBackRankChange() {
 
 function initializeGameFromBackRank(backRank, currentId = null) {
     const positionId = currentId ?? chess960.getIdFromPosition(backRank);
+    stopReplay();
     pendingPromotion = null;
     gameState = chess960.createGame(backRank);
     renderValidBackRank(backRank, positionId);
@@ -133,6 +149,7 @@ function initializeGameFromBackRank(backRank, currentId = null) {
 }
 
 function renderInvalidBackRank(backRank) {
+    stopReplay();
     currentIdDisplay.textContent = "-";
     errorMsg.classList.remove("hidden");
     reverseIdDisplay.className = "error";
@@ -281,6 +298,8 @@ function renderHistoryActions(state) {
         undoBtn.disabled = true;
         redoBtn.disabled = true;
         historyEndBtn.disabled = true;
+        historyPlayBtn.disabled = true;
+        historyPlayBtn.textContent = "Play";
         return;
     }
 
@@ -292,6 +311,8 @@ function renderHistoryActions(state) {
     undoBtn.disabled = !canUndo;
     redoBtn.disabled = !canRedo;
     historyEndBtn.disabled = !hasHistory || state.historyIndex === chess960.getHistoryLength(state) - 1;
+    historyPlayBtn.disabled = !hasHistory;
+    historyPlayBtn.textContent = isReplayRunning() ? "Pause" : "Play";
 }
 
 function renderHistoryStatus(state) {
@@ -349,6 +370,8 @@ function handleBoardClick(square) {
         return;
     }
 
+    stopReplay();
+
     if (gameState.historyIndex !== chess960.getHistoryLength(gameState) - 1) {
         setNotationStatus("Replay-Modus aktiv. Bitte zuerst zur aktuellen Stellung zurückkehren.", true);
         return;
@@ -402,6 +425,7 @@ function cancelPromotion() {
         return;
     }
 
+    stopReplay();
     pendingPromotion = null;
     renderGame();
     setNotationStatus("Bauernumwandlung abgebrochen.");
@@ -436,6 +460,7 @@ function setNotationStatus(message, isError = false) {
 }
 
 function applyImportedGameState(importedState) {
+    stopReplay();
     pendingPromotion = null;
     gameState = chess960.hydrateGameState(importedState);
     applyBackRankToInputs(gameState.backRank);
@@ -499,6 +524,7 @@ function claimDraw(reason) {
     }
 
     try {
+        stopReplay();
         gameState = chess960.claimDraw(gameState, reason);
         renderGame();
         persistGameState();
@@ -515,6 +541,7 @@ function jumpToHistory(historyIndex) {
     }
 
     try {
+        stopReplay();
         pendingPromotion = null;
         gameState = chess960.goToHistoryIndex(gameState, historyIndex);
         renderGame();
@@ -532,6 +559,7 @@ function undoMove() {
     }
 
     try {
+        stopReplay();
         pendingPromotion = null;
         gameState = chess960.undo(gameState);
         renderGame();
@@ -549,6 +577,7 @@ function redoMove() {
     }
 
     try {
+        stopReplay();
         pendingPromotion = null;
         gameState = chess960.redo(gameState);
         renderGame();
@@ -570,6 +599,97 @@ function jumpToLatest() {
     }
 
     jumpToHistory(chess960.getHistoryLength(gameState) - 1);
+}
+
+function stepReplayForward() {
+    if (!gameState) {
+        stopReplay();
+        renderGame();
+        return;
+    }
+
+    const latestIndex = chess960.getHistoryLength(gameState) - 1;
+
+    if (gameState.historyIndex >= latestIndex) {
+        stopReplay();
+        renderGame();
+        setNotationStatus("Replay am aktuellen Stand beendet.");
+        return;
+    }
+
+    gameState = chess960.goToHistoryIndex(gameState, gameState.historyIndex + 1);
+    renderGame();
+    persistGameState();
+}
+
+function toggleReplay() {
+    if (!gameState) {
+        return;
+    }
+
+    if (isReplayRunning()) {
+        stopReplay();
+        renderGame();
+        setNotationStatus("Replay pausiert.");
+        return;
+    }
+
+    const latestIndex = chess960.getHistoryLength(gameState) - 1;
+
+    if (latestIndex === 0) {
+        setNotationStatus("Noch keine Züge für Replay vorhanden.", true);
+        return;
+    }
+
+    if (gameState.historyIndex >= latestIndex) {
+        gameState = chess960.goToHistoryIndex(gameState, 0);
+    }
+
+    replayTimerId = window.setInterval(stepReplayForward, 700);
+    renderGame();
+    persistGameState();
+    setNotationStatus("Replay gestartet.");
+}
+
+function shouldIgnoreHistoryShortcut(target) {
+    if (!(target instanceof HTMLElement)) {
+        return false;
+    }
+
+    return Boolean(target.closest("textarea, input, select"));
+}
+
+function handleGlobalKeydown(event) {
+    if (!gameState || event.altKey || event.ctrlKey || event.metaKey) {
+        return;
+    }
+
+    if (shouldIgnoreHistoryShortcut(event.target)) {
+        return;
+    }
+
+    if (event.key === "ArrowLeft") {
+        event.preventDefault();
+        undoMove();
+        return;
+    }
+
+    if (event.key === "ArrowRight") {
+        event.preventDefault();
+        redoMove();
+        return;
+    }
+
+    if (event.key === "Home") {
+        event.preventDefault();
+        jumpToStart();
+        return;
+    }
+
+    if (event.key === "End") {
+        event.preventDefault();
+        jumpToLatest();
+    }
 }
 
 function getSymbolForPiece(piece) {
@@ -675,6 +795,7 @@ diceBtn.addEventListener("click", () => {
 });
 
 resetBtn.addEventListener("click", () => {
+    stopReplay();
     pendingPromotion = null;
     localStorage.removeItem(UI_STORAGE_KEY);
     localStorage.removeItem(GAME_STORAGE_KEY);
@@ -687,6 +808,7 @@ historyStartBtn.addEventListener("click", jumpToStart);
 undoBtn.addEventListener("click", undoMove);
 redoBtn.addEventListener("click", redoMove);
 historyEndBtn.addEventListener("click", jumpToLatest);
+historyPlayBtn.addEventListener("click", toggleReplay);
 promotionButtons.forEach((button) => {
     button.addEventListener("click", () => confirmPromotion(button.dataset.promotionPiece));
 });
@@ -713,6 +835,7 @@ refreshPgnBtn.addEventListener("click", () => {
 importPgnBtn.addEventListener("click", importPgn);
 claimThreefoldBtn.addEventListener("click", () => claimDraw("threefoldRepetition"));
 claimFiftyMoveBtn.addEventListener("click", () => claimDraw("fiftyMoveRule"));
+document.addEventListener("keydown", handleGlobalKeydown);
 
 initializeDropdowns();
 restoreInitialState();

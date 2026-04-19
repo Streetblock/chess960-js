@@ -256,6 +256,12 @@ button:active { transform: scale(0.98); }
     color: #5d6d7e;
 }
 
+.history-help {
+    margin-top: 8px;
+    font-size: 13px;
+    color: #7b8794;
+}
+
 hr {
     border: 0;
     height: 1px;
