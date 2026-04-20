@@ -10,6 +10,9 @@ Abhaengigkeitsfreie Chess960-Bibliothek in plain ES Modules. Das Projekt besteht
 
 Die Engine kann inzwischen deutlich mehr als nur Startaufstellungen erzeugen. Sie verwaltet komplette Chess960-Partien, erzeugt legale Zuege, liest und schreibt Notation, erkennt Remisfaelle und haelt Undo/Redo-Historie.
 
+## 🌟 Live Demo
+[Hier geht's zur Live-Demo](https://streetblock.github.io/chess960-js/) 
+
 ## Aktueller Umfang
 
 - alle 960 legalen Chess960-Grundreihen erzeugen

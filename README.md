@@ -1,4 +1,4 @@
-﻿# Chess960 Engine & UI
+﻿# Chess960 (Fischer Random) Engine & UI
 
 *Lese dies auf  [Deutsch](README_de.md)*
 
@@ -9,6 +9,10 @@ Zero-dependency Chess960 library in plain ES modules. The project contains:
 - a regression suite in `tests/`
 
 The engine goes beyond start-position generation. It can play full Chess960 games, track legal moves, export and import notation, detect draws, and manage undo/redo history.
+
+
+## 🌟 Live Demo
+[View Live Demo here](https://streetblock.github.io/chess960-js/)  
 
 ## Current Scope
 
