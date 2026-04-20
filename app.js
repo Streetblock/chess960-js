@@ -360,6 +360,8 @@ function renderMoveLog(moves) {
         return;
     }
 
+    const variationLogInfo = chess960.getVariationLogInfo(gameState);
+    const variationLogInfoByPly = new Map(variationLogInfo.map((entry) => [entry.ply, entry]));
     const rows = [];
 
     moves.forEach((move) => {
@@ -385,14 +387,14 @@ function renderMoveLog(moves) {
         numberElement.textContent = `${row.moveNumber}.`;
         rowElement.appendChild(numberElement);
 
-        rowElement.appendChild(createMoveLogCell(row.white, "Weiß"));
-        rowElement.appendChild(createMoveLogCell(row.black, "Schwarz"));
+        rowElement.appendChild(createMoveLogCell(row.white, "Weiß", variationLogInfoByPly.get(row.white?.ply)));
+        rowElement.appendChild(createMoveLogCell(row.black, "Schwarz", variationLogInfoByPly.get(row.black?.ply)));
 
         moveLog.appendChild(rowElement);
     });
 }
 
-function createMoveLogCell(move, fallbackLabel) {
+function createMoveLogCell(move, fallbackLabel, variationMeta) {
     const cell = document.createElement("div");
     cell.className = "move-log-cell";
 
@@ -412,7 +414,23 @@ function createMoveLogCell(move, fallbackLabel) {
         button.classList.add("active");
     }
 
+    if (variationMeta?.isSideLine) {
+        button.classList.add("variation-line");
+    }
+
+    if (variationMeta?.hasSiblingBranches) {
+        button.classList.add("branch-point");
+    }
+
     button.textContent = `${fallbackLabel} ${move.san ?? move.notation}`;
+
+    if (variationMeta?.hasSiblingBranches) {
+        const badge = document.createElement("span");
+        badge.className = "move-log-badge";
+        badge.textContent = variationMeta.isPreferredChild ? "Abzweig" : "Variante";
+        button.appendChild(badge);
+    }
+
     button.addEventListener("click", () => jumpToHistory(move.ply));
     cell.appendChild(button);
     return cell;

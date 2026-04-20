@@ -1433,6 +1433,28 @@ export default class Chess960 {
         };
     }
 
+    getVariationLogInfo(gameState) {
+        const normalizedState = this.#syncVariationState(this.hydrateGameState(gameState));
+        const variationInfo = this.getVariationInfo(normalizedState);
+        const branchPointIndex = variationInfo.branchPointIndex;
+
+        return normalizedState.lineNodeIds.map((nodeId, index) => {
+            const node = normalizedState.variationGraph.nodes[nodeId];
+            const parentNode = index > 0
+                ? normalizedState.variationGraph.nodes[normalizedState.lineNodeIds[index - 1]]
+                : null;
+
+            return {
+                ply: index,
+                nodeId,
+                hasSiblingBranches: Boolean(parentNode && parentNode.children.length > 1),
+                isSideLine: branchPointIndex !== -1 && index >= branchPointIndex,
+                isPreferredChild: Boolean(!parentNode || parentNode.preferredChildId === nodeId),
+                childVariationCount: node?.children?.length ?? 0
+            };
+        });
+    }
+
     #restoreHistoryState(gameState, historyIndex) {
         const snapshot = gameState.stateHistory[historyIndex];
 

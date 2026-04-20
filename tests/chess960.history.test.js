@@ -181,5 +181,26 @@ export default [
             assert.equal(mainLineInfo.isMainLine, true);
             assert.equal(mainLineInfo.branchPointIndex, -1);
         }
+    },
+    {
+        name: "reports move log hints for branch points and side lines",
+        run() {
+            const engine = new Chess960();
+            let game = engine.createGame(518);
+
+            game = engine.movePiece(game, "e2", "e4");
+            game = engine.movePiece(game, "e7", "e5");
+            game = engine.movePiece(game, "g1", "f3");
+
+            const variation = engine.movePiece(engine.forkFromHistoryIndex(game, 1), "c7", "c5");
+            const logInfo = engine.getVariationLogInfo(variation);
+
+            assert.equal(logInfo.length, 3);
+            assert.equal(logInfo[1].hasSiblingBranches, false);
+            assert.equal(logInfo[1].isSideLine, false);
+            assert.equal(logInfo[2].hasSiblingBranches, true);
+            assert.equal(logInfo[2].isPreferredChild, false);
+            assert.equal(logInfo[2].isSideLine, true);
+        }
     }
 ];

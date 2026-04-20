@@ -387,6 +387,8 @@ hr {
     width: 100%;
     min-width: 0;
     justify-content: flex-start;
+    align-items: center;
+    justify-content: space-between;
     border-radius: 6px;
     padding: 10px 12px;
     font-size: 14px;
@@ -409,6 +411,16 @@ hr {
     border-color: #7aa5d6;
 }
 
+.move-log-item.variation-line {
+    background: #f7f0ff;
+    border-color: #c8b5f6;
+    color: #4f378b;
+}
+
+.move-log-item.branch-point {
+    box-shadow: inset 3px 0 0 #7d5fff;
+}
+
 .move-log-item.empty {
     background: transparent;
     border: 1px dashed #d8e0e8;
@@ -419,6 +431,18 @@ hr {
 .move-log-item.empty:hover {
     background: transparent;
     border-color: #d8e0e8;
+}
+
+.move-log-badge {
+    flex: 0 0 auto;
+    margin-left: 8px;
+    padding: 3px 7px;
+    border-radius: 999px;
+    background: rgba(125, 95, 255, 0.12);
+    color: #5b3fd1;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.02em;
 }
 
 @media (max-width: 560px) {
