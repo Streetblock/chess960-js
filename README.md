@@ -1,6 +1,6 @@
 ﻿# Chess960 Engine & UI
 
-*Read this in [German](README_de.md)*
+*Lese dies auf  [Deutsch](README_de.md)*
 
 Zero-dependency Chess960 library in plain ES modules. The project contains:
 

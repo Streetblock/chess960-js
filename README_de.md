@@ -1,6 +1,6 @@
 ﻿# Chess960 Engine & UI
 
-*Lies dies auf [Englisch](README.md)*
+*Read this in [English](README.md)*
 
 Abhaengigkeitsfreie Chess960-Bibliothek in plain ES Modules. Das Projekt besteht aus:
 
